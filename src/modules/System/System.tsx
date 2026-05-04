@@ -7,7 +7,7 @@ import { formatCurrency } from '../../lib/utils';
 
 const System: React.FC = () => {
   const { profile, isAdmin, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<'prices' | 'users' | 'bank' | 'backup' | 'diagnostics'>('prices');
+  const [activeTab, setActiveTab] = useState<'prices' | 'users' | 'bank' | 'backup' | 'diagnostics' | 'vinvoice'>('prices');
 
   const tabs = [
     { id: 'prices', label: 'Giá Vàng', roles: ['ADMIN', 'SALES'] },

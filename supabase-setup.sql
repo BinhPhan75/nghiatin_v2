@@ -194,7 +194,51 @@ CREATE POLICY "Admins can update system config" ON public.system_config FOR UPDA
 );
 
 -- ==========================================
--- 7. FUNCTIONS (Auto-update updated_at)
+-- 7. TRIGGERS & FUNCTIONS
+-- ==========================================
+
+-- Function to handle new user signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, role, status)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    CASE WHEN NEW.email = 'binhphan.070582@gmail.com' THEN 'ADMIN' ELSE 'SALES' END,
+    CASE WHEN NEW.email = 'binhphan.070582@gmail.com' THEN 'APPROVED' ELSE 'PENDING' END
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    role = CASE WHEN EXCLUDED.email = 'binhphan.070582@gmail.com' THEN 'ADMIN' ELSE public.profiles.role END,
+    status = CASE WHEN EXCLUDED.email = 'binhphan.070582@gmail.com' THEN 'APPROVED' ELSE public.profiles.status END;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger for new user signup
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- Sync existing users to profiles
+DO $$
+BEGIN
+  INSERT INTO public.profiles (id, email, role, status)
+  SELECT 
+    id, 
+    email, 
+    CASE WHEN email = 'binhphan.070582@gmail.com' THEN 'ADMIN' ELSE 'SALES' END,
+    CASE WHEN email = 'binhphan.070582@gmail.com' THEN 'APPROVED' ELSE 'PENDING' END
+  FROM auth.users
+  ON CONFLICT (id) DO UPDATE SET
+    role = CASE WHEN public.profiles.email = 'binhphan.070582@gmail.com' THEN 'ADMIN' ELSE public.profiles.role END,
+    status = CASE WHEN public.profiles.email = 'binhphan.070582@gmail.com' THEN 'APPROVED' ELSE public.profiles.status END;
+END $$;
+
+-- ==========================================
+-- 8. AUTO-UPDATE TIMESTAMPS
 -- ==========================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
