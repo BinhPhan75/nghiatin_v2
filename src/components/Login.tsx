@@ -11,8 +11,14 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const isPlaceholder = import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' || !import.meta.env.VITE_SUPABASE_URL;
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPlaceholder) {
+      setError('Hệ thống chưa được cấu hình Supabase! Vui lòng vào Cài đặt và nhập URL & Anon Key.');
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -25,7 +31,13 @@ const Login: React.FC = () => {
     });
 
     if (authError) {
-      setError('Thông tin đăng nhập không chính xác');
+      if (authError.message.includes('Invalid login credentials')) {
+        setError('Email hoặc mật khẩu không chính xác');
+      } else if (authError.message.includes('Email not confirmed')) {
+        setError('Tài khoản chưa được xác nhận email. Vui lòng kiểm tra hộp thư hoặc tắt tính năng "Confirm email" trong Supabase.');
+      } else {
+        setError(`Lỗi: ${authError.message}`);
+      }
     } else {
       navigate('/');
     }
