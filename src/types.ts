@@ -48,6 +48,13 @@ export interface Transaction {
   deduction_note?: string;
   customer_bank_id?: string;
   customer_account_no?: string;
+  
+  // E-Invoice
+  invoice_no?: string;
+  invoice_status?: 'NOT_ISSUED' | 'PENDING' | 'ISSUED' | 'FAILED';
+  invoice_error?: string;
+  reservation_code?: string;
+  
   created_at: string;
   created_by: string;
   salesperson?: {
@@ -62,4 +69,11 @@ export interface SystemConfig {
   account_no: string;
   account_holder: string;
   bank_id: string; // e.g., ICB for VietinBank, VCB for Vietcombank
+  
+  // Viettel vInvoice
+  viettel_username?: string;
+  viettel_password?: string;
+  viettel_tax_code?: string;
+  viettel_app_id?: string;
+  viettel_is_sandbox?: boolean;
 }

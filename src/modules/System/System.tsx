@@ -13,6 +13,7 @@ const System: React.FC = () => {
     { id: 'prices', label: 'Giá Vàng', roles: ['ADMIN', 'SALES'] },
     { id: 'users', label: 'Nhân Viên', roles: ['ADMIN'] },
     { id: 'bank', label: 'Ngân Hàng', roles: ['ADMIN'] },
+    { id: 'vinvoice', label: 'vInvoice', roles: ['ADMIN'] },
     { id: 'backup', label: 'Bảo Trì', roles: ['ADMIN'] },
     { id: 'diagnostics', label: 'Kiểm Tra Kết Nối', roles: ['ADMIN'] },
   ];
@@ -233,7 +234,12 @@ const System: React.FC = () => {
           bank_name: config.bank_name,
           account_no: config.account_no,
           account_holder: config.account_holder,
-          bank_id: config.bank_id
+          bank_id: config.bank_id,
+          viettel_username: config.viettel_username,
+          viettel_password: config.viettel_password,
+          viettel_tax_code: config.viettel_tax_code,
+          viettel_app_id: config.viettel_app_id,
+          viettel_is_sandbox: config.viettel_is_sandbox
         })
         .eq('id', config.id);
 
@@ -706,6 +712,84 @@ const System: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'vinvoice' && (
+          <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-6 max-w-xl">
+              <div className="flex items-center gap-3 border-b border-neutral-100 pb-4 mb-4">
+                <ShieldCheck className="text-gold-primary" />
+                <h3 className="text-xl">Cấu hình Hóa đơn điện tử Viettel</h3>
+              </div>
+              
+              <p className="text-xs text-neutral-500 italic bg-blue-50 p-4 border-l-4 border-blue-400">
+                Thông tin này được dùng để kết nối với hệ thống vInvoice (SInvoice) của Viettel. 
+                Vui lòng nhập đúng tài khoản được Viettel cung cấp.
+              </p>
+
+              {config && (
+                <form onSubmit={handleUpdateConfig} className="flex flex-col gap-6">
+                  <div className="input-field">
+                    <label>Tài khoản (Username)</label>
+                    <input 
+                      type="text" 
+                      placeholder="VD: MST_User"
+                      value={config.viettel_username || ''} 
+                      onChange={e => setConfig({...config, viettel_username: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="input-field">
+                    <label>Mật khẩu</label>
+                    <input 
+                      type="password" 
+                      value={config.viettel_password || ''} 
+                      onChange={e => setConfig({...config, viettel_password: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="input-field">
+                    <label>Mã số thuế doanh nghiệp</label>
+                    <input 
+                      type="text" 
+                      value={config.viettel_tax_code || ''} 
+                      onChange={e => setConfig({...config, viettel_tax_code: e.target.value})}
+                    />
+                  </div>
+                  
+                  <div className="input-field">
+                    <label>App ID (Nếu có)</label>
+                    <input 
+                      type="text" 
+                      value={config.viettel_app_id || ''} 
+                      onChange={e => setConfig({...config, viettel_app_id: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 py-2">
+                    <input 
+                      type="checkbox" 
+                      id="isSandbox"
+                      checked={config.viettel_is_sandbox || false}
+                      onChange={e => setConfig({...config, viettel_is_sandbox: e.target.checked})}
+                      className="w-4 h-4 accent-gold-primary"
+                    />
+                    <label htmlFor="isSandbox" className="text-sm font-bold cursor-pointer">Sử dụng môi trường thử nghiệm (Sandbox)</label>
+                  </div>
+
+                  {isAdmin ? (
+                    <button type="submit" className="vcb-btn flex items-center justify-center gap-2">
+                      <Save size={18} /> Lưu cấu hình Viettel
+                    </button>
+                  ) : (
+                    <div className="bg-neutral-50 p-4 border-l-4 border-neutral-300 italic text-xs text-neutral-600">
+                      Bạn không có quyền thay đổi thông tin cấu hình hóa đơn.
+                    </div>
+                  )}
+                </form>
+              )}
             </div>
           </div>
         )}

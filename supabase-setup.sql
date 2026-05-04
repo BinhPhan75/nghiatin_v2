@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS public.banks (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Seed Comprehensive Vietnamese Banks
+-- Seed Comprehensive Vietnamese Banks (Fixed Duplicates)
 INSERT INTO public.banks (short_name, full_name, bin) VALUES
 ('VCB', 'Vietcombank', '970436'),
 ('BIDV', 'BIDV', '970418'),
@@ -72,8 +72,8 @@ INSERT INTO public.banks (short_name, full_name, bin) VALUES
 ('BVB', 'BaoViet Bank', '970438'),
 ('KLB', 'Kienlongbank', '970452'),
 ('DAB', 'DongA Bank', '970406'),
-('GPB', 'GPBank', '970428'),
-('OCEANBANK', 'OceanBank', '970408'),
+('GPB', 'GPBank', '970408'), -- FIXED BIN
+('OCEANBANK', 'OceanBank', '970414'), -- FIXED BIN (from 970408)
 ('CB', 'CB Bank', '970444'),
 ('IVB', 'Indovina Bank', '970434'),
 ('VRB', 'Vietnam-Russia Bank', '970421'),
@@ -87,12 +87,12 @@ INSERT INTO public.banks (short_name, full_name, bin) VALUES
 ('KBANK', 'KBank HCM Branch', '970460'),
 ('PBVN', 'Public Bank Vietnam', '970439'),
 ('VCCB', 'Viet Capital Bank', '970454'),
-('VBSP', 'Ngân hàng Chính sách xã hội', '970400'),
+('VBSP', 'VBSP', '970446'), -- FIXED BIN (from 970400)
 ('VDB', 'Ngân hàng Phát triển Việt Nam', '970455'),
 ('CAKE', 'Cake by VPBank', '546034'),
 ('UBANK', 'Ubank by VPBank', '546035'),
 ('TIMO', 'Timo by Ban Viet Bank', '963388'),
-('COOPBANK', 'Co-op Bank', '970446')
+('COOPBANK', 'Co-op Bank', '970447') -- FIXED BIN (from 970446)
 ON CONFLICT (bin) DO UPDATE SET 
   short_name = EXCLUDED.short_name,
   full_name = EXCLUDED.full_name;
@@ -121,12 +121,19 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   giam_tru NUMERIC DEFAULT 0,
   other_deduction NUMERIC DEFAULT 0,
   deduction_note TEXT,
+  
+  -- E-Invoice Fields
+  invoice_no TEXT, -- Số hóa đơn
+  invoice_status TEXT DEFAULT 'NOT_ISSUED', -- NOT_ISSUED, PENDING, ISSUED, FAILED
+  invoice_error TEXT,
+  reservation_code TEXT, -- Mã tra cứu hóa đơn
+  
   created_at TIMESTAMPTZ DEFAULT NOW(),
   created_by UUID REFERENCES auth.users(id)
 );
 
 -- ==========================================
--- 5. SYSTEM CONFIG (Shop Bank Account)
+-- 5. SYSTEM CONFIG (Shop & E-Invoice)
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.system_config (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -134,6 +141,14 @@ CREATE TABLE IF NOT EXISTS public.system_config (
   account_no TEXT,
   account_holder TEXT,
   bank_id TEXT, -- Short name/ID code for VietQR (e.g. VCB)
+  
+  -- Viettel vInvoice Config
+  viettel_username TEXT,
+  viettel_password TEXT,
+  viettel_tax_code TEXT,
+  viettel_app_id TEXT,
+  viettel_is_sandbox BOOLEAN DEFAULT false,
+  
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 

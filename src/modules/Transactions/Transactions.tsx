@@ -7,6 +7,8 @@ import { Camera, QrCode, CreditCard, Send, CheckCircle2, Search, ArrowLeftRight,
 import QRScanner from '../../components/QRScanner';
 import { parseCCCD, getVietQRUrl, formatCurrency, removeVietnameseTones, parseVietQR, generateEMVCoQR, getRawQRUrl } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { createViettelInvoice } from '../../services/viettelService';
+import { FileText, Loader2 } from 'lucide-react';
 
 const Transactions: React.FC = () => {
   const { profile } = useAuth();
@@ -52,6 +54,9 @@ const Transactions: React.FC = () => {
   const [qrUrl, setQrUrl] = useState('');
   const [lastError, setLastError] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [issuingInvoice, setIssuingInvoice] = useState(false);
+  const [lastInsertedId, setLastInsertedId] = useState<string | null>(null);
+  const [invoiceResult, setInvoiceResult] = useState<{ no: string; code: string } | null>(null);
 
   // Handheld Scanner Support
   const scanBuffer = React.useRef<string>('');
@@ -401,8 +406,12 @@ const Transactions: React.FC = () => {
 
     setLastError(null);
     try {
-      const { error } = await supabase.from('transactions').insert(transactions);
+      const { data, error } = await supabase.from('transactions').insert(transactions).select('id');
       if (error) throw error;
+      
+      if (data && data.length > 0) {
+        setLastInsertedId(data[0].id);
+      }
       
       // Synchronized Memo Content Logic (Matches visual display and bank requirements)
       const memoSummary = cart.map(item => `${item.product.name} X ${item.quantity}`).join(' ');
@@ -454,6 +463,23 @@ const Transactions: React.FC = () => {
     }
   };
 
+  const handleIssueInvoice = async () => {
+    if (!lastInsertedId) return;
+    setIssuingInvoice(true);
+    try {
+      const result = await createViettelInvoice(lastInsertedId);
+      setInvoiceResult({
+        no: result.invoiceNo,
+        code: result.reservationCode
+      });
+      alert(`Đã phát hành hóa đơn thành công! Số: ${result.invoiceNo}`);
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setIssuingInvoice(false);
+    }
+  };
+
   const resetForm = () => {
     setCustomerName('');
     setCustomerCCCD('');
@@ -474,6 +500,8 @@ const Transactions: React.FC = () => {
     setShowSuccess(false);
     setShowQR(false);
     setSubmitting(false);
+    setLastInsertedId(null);
+    setInvoiceResult(null);
   };
 
   const { user } = useAuth();
@@ -988,6 +1016,27 @@ const Transactions: React.FC = () => {
                     <CreditCard size={16} className="text-neutral-400" />
                   </button>
                 </div>
+
+                {type === 'SELL' && lastInsertedId && (
+                  <div className="mt-6 border-t border-dashed pt-6 border-neutral-200">
+                    {invoiceResult ? (
+                      <div className="bg-blue-50 p-4 rounded border border-blue-100 text-left">
+                        <p className="text-[9px] font-black uppercase text-blue-400 mb-1">Đã phát hành hóa đơn</p>
+                        <p className="text-xs font-bold text-blue-900">Số HĐ: {invoiceResult.no}</p>
+                        <p className="text-[10px] text-blue-700">Mã tra cứu: {invoiceResult.code}</p>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={handleIssueInvoice}
+                        disabled={issuingInvoice}
+                        className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3 px-4 rounded-sm text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all disabled:opacity-50"
+                      >
+                        {issuingInvoice ? <Loader2 className="animate-spin" size={14} /> : <FileText size={14} />}
+                        Xuất Hóa Đơn Điện Tử (Viettel)
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <button 
@@ -1023,6 +1072,27 @@ const Transactions: React.FC = () => {
                 )}
               </p>
               
+              {type === 'SELL' && lastInsertedId && (
+                <div className="w-full mt-4 border-t border-dashed pt-4 border-neutral-100">
+                   {invoiceResult ? (
+                      <div className="bg-blue-50 p-4 rounded border border-blue-100 text-left mb-4">
+                        <p className="text-[9px] font-black uppercase text-blue-400 mb-1">Đã phát hành hóa đơn</p>
+                        <p className="text-xs font-bold text-blue-900">Số HĐ: {invoiceResult.no}</p>
+                        <p className="text-[10px] text-blue-700">Mã tra cứu: {invoiceResult.code}</p>
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={handleIssueInvoice}
+                        disabled={issuingInvoice}
+                        className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-4 px-4 rounded-sm text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all disabled:opacity-50 mb-4 shadow-sm"
+                      >
+                        {issuingInvoice ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />}
+                        Xuất Hóa Đơn Điện Tử
+                      </button>
+                    )}
+                </div>
+              )}
+
               <button 
                 onClick={resetForm}
                 className="w-full py-4 bg-ink text-white font-black uppercase text-xs tracking-widest hover:bg-gold-primary hover:text-ink transition-all shadow-md"
