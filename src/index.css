@@ -1,0 +1,136 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --animate-flash-fast: flash-fast 0.3s ease-out;
+
+  @keyframes flash-fast {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}
+
+:root {
+  font-family: var(--font-sans);
+}
+
+body {
+  @apply bg-white text-neutral-900 antialiased;
+}
+
+/* Hide scrollbars for a clean mobile app feel */
+::-webkit-scrollbar {
+  display: none;
+}
+
+@theme {
+  --color-gold-primary: #D4AF37;
+  --color-gold-dark: #996515;
+  --color-ink: #0F0F0F;
+  --color-paper: #FDFDFD;
+  --color-gray-bg: #F5F5F5;
+  --color-vcb-blue: #006738;
+  
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, monospace;
+
+  @keyframes scanLine {
+    0% { top: 15%; opacity: 0; }
+    15% { opacity: 0.6; }
+    85% { opacity: 0.6; }
+    100% { top: 85%; opacity: 0; }
+  }
+
+  @keyframes loading {
+    0% { transform: scaleX(0); }
+    50% { transform: scaleX(0.7); }
+    100% { transform: scaleX(1); opacity: 0; }
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-ink text-paper font-sans antialiased selection:bg-gold-primary selection:text-ink;
+  }
+  
+  h1 {
+    @apply font-black uppercase tracking-tighter leading-[0.9] text-3xl md:text-4xl lg:text-5xl;
+  }
+
+  h2, h3, h4 {
+    @apply font-black uppercase tracking-tighter leading-[0.9];
+  }
+}
+
+/* Theme Utilities */
+.hero-header h1 {
+  @apply text-5xl md:text-7xl lg:text-8xl;
+}
+
+.price-card {
+  @apply bg-white/5 p-4 border-l-4 border-gold-primary transition-all hover:bg-white/10;
+}
+
+.price-card span {
+  @apply text-[10px] uppercase font-bold text-gold-primary tracking-widest;
+}
+
+.price-card .value {
+  @apply text-2xl font-black mt-1;
+}
+
+.transaction-pane {
+  @apply bg-paper text-ink rounded-sm p-6 flex flex-col gap-6 shadow-2xl;
+}
+
+.input-field {
+  @apply flex flex-col gap-1;
+}
+
+.input-field label {
+  @apply text-[10px] uppercase font-black text-neutral-400 tracking-wider;
+}
+
+.input-field input, .input-field select {
+  @apply p-3 border border-neutral-200 text-lg font-bold outline-none focus:border-ink transition-colors text-ink bg-white;
+}
+
+.cccd-box {
+  @apply border-2 border-dashed border-gold-primary p-5 rounded-lg text-center bg-gold-primary/5;
+}
+
+.btn-toggle {
+  @apply flex-1 p-3 text-center font-black text-xs tracking-widest border border-neutral-200 transition-all;
+}
+
+.btn-toggle.active {
+  @apply bg-ink text-paper border-ink;
+}
+
+.vcb-btn {
+  @apply bg-vcb-blue text-white p-5 rounded-sm font-black text-sm uppercase tracking-widest hover:brightness-110 active:scale-[0.98] transition-all;
+}
+
+.nav-item-bold {
+  @apply w-12 h-12 md:w-14 md:h-14 border border-gold-primary/30 flex items-center justify-center text-[8px] uppercase font-black tracking-tighter text-gold-primary transition-all hover:bg-gold-primary hover:text-ink;
+}
+
+.nav-item-mobile {
+  @apply flex flex-col items-center justify-center flex-1 py-1 text-gold-primary/60 transition-all;
+}
+
+.nav-item-mobile.active {
+  @apply text-gold-primary bg-white/5;
+}
+
+.nav-item-mobile span {
+  @apply text-[8px] uppercase font-black tracking-tighter mt-1;
+}
+
+.nav-item-bold.active {
+  @apply bg-gold-primary text-ink border-gold-primary;
+}
+
+

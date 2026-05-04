@@ -1,0 +1,7 @@
+{
+  "name": "NGHIATINGOLD.V2",
+  "description": "Ứng dụng quét thẻ CCCD mặt trước bằng camera điện thoại, sử dụng AI để trích xuất thông tin tự động, không phụ thuộc vào mã QR.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
