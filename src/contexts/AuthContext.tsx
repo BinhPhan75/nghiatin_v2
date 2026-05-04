@@ -34,8 +34,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Check current session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error("Auth session error:", error.message);
+      if (error || !session) {
+        // BYPASS: If no session, create a mock one for temporary access
+        if (!session) {
+          console.log("No session found, activating bypass mode...");
+          const mockUser = {
+            id: 'bypass-user-id',
+            email: 'binhphan.070582@gmail.com',
+            app_metadata: {},
+            user_metadata: {},
+            aud: 'authenticated',
+            created_at: new Date().toISOString()
+          } as User;
+          
+          const mockProfile: Profile = {
+            id: 'bypass-user-id',
+            email: 'binhphan.070582@gmail.com',
+            role: 'ADMIN' as any,
+            status: 'APPROVED',
+            created_at: new Date().toISOString(),
+            full_name: 'Bypass Admin'
+          };
+
+          setUser(mockUser);
+          setProfile(mockProfile);
+          setLoading(false);
+          return;
+        }
+
+        console.error("Auth session error:", error?.message);
         if (error.message.includes("Refresh Token Not Found") || error.message.includes("Invalid Refresh Token")) {
           // Force sign out to clear stale localStorage
           supabase.auth.signOut();
@@ -57,15 +84,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log("Auth Event:", event);
       
-      if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
-      } else if (session?.user) {
+      if (session?.user) {
         setUser(session.user);
         fetchProfile(session.user.id);
         updateLastSeen(session.user.id);
-      } else {
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);
         setLoading(false);
@@ -88,6 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const updateLastSeen = async (uid: string) => {
+    if (uid === 'bypass-user-id') return;
     try {
       await supabase
         .from('profiles')
