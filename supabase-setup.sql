@@ -164,6 +164,9 @@ ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_config ENABLE ROW LEVEL SECURITY;
 
 -- Profiles Policies
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Admins can update any profile" ON public.profiles;
 CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
 CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Admins can update any profile" ON public.profiles FOR ALL USING (
@@ -171,15 +174,20 @@ CREATE POLICY "Admins can update any profile" ON public.profiles FOR ALL USING (
 );
 
 -- Banks Policies
+DROP POLICY IF EXISTS "Banks are viewable by everyone" ON public.banks;
 CREATE POLICY "Banks are viewable by everyone" ON public.banks FOR SELECT USING (true);
 
 -- Products Policies
+DROP POLICY IF EXISTS "Products are viewable by everyone" ON public.products;
+DROP POLICY IF EXISTS "Admins can manage products" ON public.products;
 CREATE POLICY "Products are viewable by everyone" ON public.products FOR SELECT USING (true);
 CREATE POLICY "Admins can manage products" ON public.products FOR ALL USING (
   EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
 );
 
 -- Transactions Policies
+DROP POLICY IF EXISTS "Users can view transactions if approved" ON public.transactions;
+DROP POLICY IF EXISTS "Sales can create transactions" ON public.transactions;
 CREATE POLICY "Users can view transactions if approved" ON public.transactions FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND status = 'APPROVED')
 );
@@ -188,6 +196,8 @@ CREATE POLICY "Sales can create transactions" ON public.transactions FOR INSERT 
 );
 
 -- System Config Policies
+DROP POLICY IF EXISTS "System config viewable by everyone" ON public.system_config;
+DROP POLICY IF EXISTS "Admins can update system config" ON public.system_config;
 CREATE POLICY "System config viewable by everyone" ON public.system_config FOR SELECT USING (true);
 CREATE POLICY "Admins can update system config" ON public.system_config FOR UPDATE USING (
   EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
@@ -248,6 +258,11 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_profiles_modtime ON public.profiles;
 CREATE TRIGGER update_profiles_modtime BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_products_modtime ON public.products;
 CREATE TRIGGER update_products_modtime BEFORE UPDATE ON public.products FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_system_config_modtime ON public.system_config;
 CREATE TRIGGER update_system_config_modtime BEFORE UPDATE ON public.system_config FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
