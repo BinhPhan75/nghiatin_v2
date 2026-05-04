@@ -6,10 +6,10 @@ import { supabase } from '../lib/supabase';
 
 const MainLayout: React.FC = () => {
   const navigate = useNavigate();
-  const { profile, isAdmin, isSales, isAccountant } = useAuth();
+  const { profile, isAdmin, isSales, isAccountant, signOut } = useAuth();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await signOut();
     navigate('/login');
   };
 

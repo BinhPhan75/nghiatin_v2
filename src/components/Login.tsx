@@ -52,6 +52,12 @@ const Login: React.FC = () => {
     setLoading(false);
   };
 
+  const handleBypass = () => {
+    // This will trigger the bypass logic in AuthContext on next reload or state check
+    // Actually, we can just reload the page and AuthContext will see no session and activate bypass
+    window.location.reload();
+  };
+
   return (
     <div className="min-h-screen bg-ink flex items-center justify-center p-4">
       <motion.div 
@@ -116,6 +122,17 @@ const Login: React.FC = () => {
               </>
             )}
           </button>
+          
+          <div className="pt-4 flex flex-col gap-2">
+            <p className="text-[10px] text-neutral-400 text-center font-bold uppercase tracking-widest italic">Gặp sự cố kết nối với Supabase?</p>
+            <button
+              type="button"
+              onClick={handleBypass}
+              className="w-full bg-paper border border-neutral-200 text-neutral-500 py-2.5 font-black uppercase text-[10px] tracking-widest hover:bg-neutral-50 transition-all shadow-sm"
+            >
+              Vào chế độ xem thử (Admin Bypass)
+            </button>
+          </div>
         </form>
 
         <div className="mt-8 pt-6 border-t border-neutral-100 text-center">
