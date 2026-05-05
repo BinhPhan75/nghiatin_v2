@@ -35,35 +35,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Check current session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error || !session) {
-        // BYPASS: If no session, create a mock one for temporary access
-        if (!session) {
-          console.log("No session found, activating bypass mode...");
-          const mockUser = {
-            id: 'bypass-user-id',
-            email: 'binhphan.070582@gmail.com',
-            app_metadata: {},
-            user_metadata: {},
-            aud: 'authenticated',
-            created_at: new Date().toISOString()
-          } as User;
-          
-          const mockProfile: Profile = {
-            id: 'bypass-user-id',
-            email: 'binhphan.070582@gmail.com',
-            role: 'ADMIN' as any,
-            status: 'APPROVED',
-            created_at: new Date().toISOString(),
-            full_name: 'Bypass Admin'
-          };
-
-          setUser(mockUser);
-          setProfile(mockProfile);
-          setLoading(false);
-          return;
-        }
-
-        console.error("Auth session error:", error?.message);
+      if (error) {
+        console.error("Auth session error:", error.message);
         if (error.message.includes("Refresh Token Not Found") || error.message.includes("Invalid Refresh Token")) {
           // Force sign out to clear stale localStorage
           supabase.auth.signOut();
@@ -112,7 +85,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const updateLastSeen = async (uid: string) => {
-    if (uid === 'bypass-user-id') return;
     try {
       await supabase
         .from('profiles')
@@ -124,7 +96,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const fetchProfile = async (uid: string) => {
-    if (uid === 'bypass-user-id') return;
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -154,10 +125,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
-    // Reload if in bypass mode
-    if (user?.id === 'bypass-user-id') {
-      window.location.reload();
-    }
   };
 
   const role = profile?.role?.toUpperCase();
