@@ -162,6 +162,18 @@ CREATE TABLE IF NOT EXISTS public.viettel_config (
 -- 7. SECURITY (Row Level Security)
 -- ==========================================
 
+-- Helper function to check if user is admin (avoids recursion)
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN (
+    SELECT (role = 'ADMIN')
+    FROM public.profiles
+    WHERE id = auth.uid()
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
@@ -174,11 +186,15 @@ ALTER TABLE public.viettel_config ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Admins can update any profile" ON public.profiles;
-CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Admins can update any profile" ON public.profiles FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
-);
+
+CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles 
+FOR SELECT USING (true);
+
+CREATE POLICY "Users can update own profile" ON public.profiles 
+FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Admins can manage profiles" ON public.profiles 
+FOR ALL USING (public.is_admin());
 
 -- Banks Policies
 DROP POLICY IF EXISTS "Banks are viewable by everyone" ON public.banks;
@@ -188,9 +204,7 @@ CREATE POLICY "Banks are viewable by everyone" ON public.banks FOR SELECT USING 
 DROP POLICY IF EXISTS "Products are viewable by everyone" ON public.products;
 DROP POLICY IF EXISTS "Admins can manage products" ON public.products;
 CREATE POLICY "Products are viewable by everyone" ON public.products FOR SELECT USING (true);
-CREATE POLICY "Admins can manage products" ON public.products FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
-);
+CREATE POLICY "Admins can manage products" ON public.products FOR ALL USING (public.is_admin());
 
 -- Transactions Policies
 DROP POLICY IF EXISTS "Users can view transactions if approved" ON public.transactions;
@@ -206,17 +220,13 @@ CREATE POLICY "Sales can create transactions" ON public.transactions FOR INSERT 
 DROP POLICY IF EXISTS "System config viewable by everyone" ON public.system_config;
 DROP POLICY IF EXISTS "Admins can update system config" ON public.system_config;
 CREATE POLICY "System config viewable by everyone" ON public.system_config FOR SELECT USING (true);
-CREATE POLICY "Admins can update system config" ON public.system_config FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
-);
+CREATE POLICY "Admins can update system config" ON public.system_config FOR UPDATE USING (public.is_admin());
 
 -- Viettel Config Policies
 DROP POLICY IF EXISTS "Viettel config viewable by everyone" ON public.viettel_config;
 DROP POLICY IF EXISTS "Admins can update viettel config" ON public.viettel_config;
 CREATE POLICY "Viettel config viewable by everyone" ON public.viettel_config FOR SELECT USING (true);
-CREATE POLICY "Admins can update viettel config" ON public.viettel_config FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
-);
+CREATE POLICY "Admins can manage viettel config" ON public.viettel_config FOR ALL USING (public.is_admin());
 
 -- ==========================================
 -- 7. TRIGGERS & FUNCTIONS
