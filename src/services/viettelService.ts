@@ -22,16 +22,25 @@ const getViettelConfig = async (): Promise<ViettelConfig | null> => {
 };
 
 const getBaseUrl = (config: ViettelConfig) => {
-  if (config.api_url) {
-    return config.api_url.trim().replace(/\/$/, '');
+  let url = '';
+  if (config.api_url && config.api_url.trim()) {
+    url = config.api_url.trim().replace(/\/$/, '');
+  } else {
+    // Correct defaults according to Viettel Technical documentation
+    url = config.is_sandbox 
+      ? 'https://demo-sinvoice.viettel.vn:8443'
+      : 'https://api-sinvoice.viettel.vn:443';
   }
-  return config.is_sandbox 
-    ? 'https://demo-sinvoice.viettel.vn:8443'
-    : 'https://api-sinvoice.viettel.vn:443';
+  
+  // Strip common suffixes to avoid double segments in endpoint construction
+  url = url.replace(/\/InvoiceAPI$/, '');
+  url = url.replace(/\/InvoiceWS$/, '');
+  
+  return url;
 };
 
 /**
- * Login to get Session/Token
+ * Login to get Session/Token (if using Session-based API)
  */
 export const loginViettel = async (config: ViettelConfig) => {
   const endpoint = `${getBaseUrl(config)}/InvoiceAPI/InvoiceWS/login`;
@@ -62,6 +71,10 @@ export const createViettelInvoice = async (transactionId: string) => {
   const config = await getViettelConfig();
   if (!config || !config.username || !config.password) {
     throw new Error('Chưa cấu hình thông tin Viettel vInvoice trong hệ thống.');
+  }
+
+  if (!config.tax_code) {
+    throw new Error('Thiếu Mã số thuế (Tax Code) trong cấu hình Viettel.');
   }
 
   // 1. Fetch transaction details
