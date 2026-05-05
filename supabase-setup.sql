@@ -163,16 +163,22 @@ CREATE TABLE IF NOT EXISTS public.viettel_config (
 -- ==========================================
 
 -- Helper function to check if user is admin (avoids recursion)
+-- SECURITY DEFINER makes it run as the function creator (bypassing RLS)
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN (
-    SELECT (role = 'ADMIN')
-    FROM public.profiles
-    WHERE id = auth.uid()
+  -- Ultimate owner fallback (bypasses profile table lookup)
+  IF (auth.jwt() ->> 'email' = 'binhphan.070582@gmail.com') THEN
+    RETURN TRUE;
+  END IF;
+
+  RETURN EXISTS (
+    SELECT 1 
+    FROM public.profiles 
+    WHERE id = auth.uid() AND role = 'ADMIN'
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -185,7 +191,7 @@ ALTER TABLE public.viettel_config ENABLE ROW LEVEL SECURITY;
 -- Profiles Policies
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Admins can update any profile" ON public.profiles;
+DROP POLICY IF EXISTS "Admins can manage profiles" ON public.profiles;
 
 CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles 
 FOR SELECT USING (true);
@@ -193,8 +199,11 @@ FOR SELECT USING (true);
 CREATE POLICY "Users can update own profile" ON public.profiles 
 FOR UPDATE USING (auth.uid() = id);
 
+-- Use the helper function but also add a direct JWT check to be absolutely safe against recursion
 CREATE POLICY "Admins can manage profiles" ON public.profiles 
-FOR ALL USING (public.is_admin());
+FOR ALL USING (
+  (auth.jwt() ->> 'email' = 'binhphan.070582@gmail.com') OR public.is_admin()
+);
 
 -- Banks Policies
 DROP POLICY IF EXISTS "Banks are viewable by everyone" ON public.banks;
@@ -210,9 +219,11 @@ CREATE POLICY "Admins can manage products" ON public.products FOR ALL USING (pub
 DROP POLICY IF EXISTS "Users can view transactions if approved" ON public.transactions;
 DROP POLICY IF EXISTS "Sales can create transactions" ON public.transactions;
 CREATE POLICY "Users can view transactions if approved" ON public.transactions FOR SELECT USING (
+  (auth.jwt() ->> 'email' = 'binhphan.070582@gmail.com') OR
   EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND status = 'APPROVED')
 );
 CREATE POLICY "Sales can create transactions" ON public.transactions FOR INSERT WITH CHECK (
+  (auth.jwt() ->> 'email' = 'binhphan.070582@gmail.com') OR
   EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('ADMIN', 'SALES') AND status = 'APPROVED')
 );
 
@@ -224,7 +235,7 @@ CREATE POLICY "Admins can update system config" ON public.system_config FOR UPDA
 
 -- Viettel Config Policies
 DROP POLICY IF EXISTS "Viettel config viewable by everyone" ON public.viettel_config;
-DROP POLICY IF EXISTS "Admins can update viettel config" ON public.viettel_config;
+DROP POLICY IF EXISTS "Admins can manage viettel config" ON public.viettel_config;
 CREATE POLICY "Viettel config viewable by everyone" ON public.viettel_config FOR SELECT USING (true);
 CREATE POLICY "Admins can manage viettel config" ON public.viettel_config FOR ALL USING (public.is_admin());
 
