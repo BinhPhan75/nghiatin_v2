@@ -246,7 +246,7 @@ const System: React.FC = () => {
     if (!config) return;
 
     try {
-      // Thử cập nhật các trường cơ bản trước để đảm bảo tính tương thích
+      // 1. Chuẩn bị payload cơ bản (chắc chắn có trong DB cũ)
       const basePayload = {
         id: config.id || '00000000-0000-0000-0000-000000000000',
         bank_name: config.bank_name || '',
@@ -259,8 +259,7 @@ const System: React.FC = () => {
         updated_at: new Date().toISOString()
       };
 
-      // Thử thêm các trường nâng cao - Supabase sẽ báo lỗi nếu thiếu cột
-      // nhưng chúng ta sẽ bắt lỗi và thử lại với payload tối giản nếu cần
+      // 2. Chuẩn bị payload đầy đủ
       const fullPayload = {
         ...basePayload,
         viettel_app_id: config.viettel_app_id || '',
@@ -268,21 +267,26 @@ const System: React.FC = () => {
         viettel_is_sandbox: !!config.viettel_is_sandbox,
       };
 
+      // 3. Thử lưu bản đầy đủ
       const { error } = await supabase
         .from('system_config')
         .upsert(fullPayload);
 
       if (error) {
-        // Nếu lỗi do thiếu cột (42703), thử lại chỉ với các trường cơ bản
-        if (error.code === '42703') {
-          console.warn("Bảng hệ thống thiếu các cột mới, đang thử lưu các trường cơ bản...");
+        // Kiểm tra nếu lỗi là do thiếu cột (col not found)
+        const isColumnError = error.code === '42703' || 
+                             error.message?.includes('column') || 
+                             error.message?.includes('schema cache');
+
+        if (isColumnError) {
+          console.warn("Database thiếu cột kỹ thuật mới, đang lưu bản rút gọn...");
           const { error: retryError } = await supabase
             .from('system_config')
             .upsert(basePayload);
           
           if (retryError) throw retryError;
           
-          alert("Lưu thành công! Lưu ý: Một số thông tin kỹ thuật (AppID, API URL) chưa được lưu vì bảng database của bạn cần được cập nhật.");
+          alert("Đã lưu thành công các thông tin cơ bản! (Một số tùy chọn nâng cao chưa được lưu do Database của bạn cần cập nhật SQL)");
         } else {
           throw error;
         }
