@@ -79,11 +79,17 @@ const System: React.FC = () => {
   };
 
   const fetchConfig = async () => {
-    const { data: snapshot } = await supabase.from('system_config').select('*').limit(1);
+    const { data: snapshot, error: fetchError } = await supabase.from('system_config').select('*').limit(1);
+    
+    if (fetchError) {
+      console.error("Lỗi khi tải cấu hình:", fetchError);
+      return;
+    }
+
     if (snapshot && snapshot.length > 0) {
       setConfig(snapshot[0]);
     } else {
-      // Initialize with default template if no config exists yet
+      // Khởi tạo mẫu mặc định nếu chưa có cấu hình nào
       setConfig({
         id: '00000000-0000-0000-0000-000000000000',
         viettel_is_sandbox: true,
@@ -240,26 +246,51 @@ const System: React.FC = () => {
     if (!config) return;
 
     try {
+      // Thử cập nhật các trường cơ bản trước để đảm bảo tính tương thích
+      const basePayload = {
+        id: config.id || '00000000-0000-0000-0000-000000000000',
+        bank_name: config.bank_name || '',
+        account_no: config.account_no || '',
+        account_holder: config.account_holder || '',
+        bank_id: config.bank_id || '',
+        viettel_username: config.viettel_username || '',
+        viettel_password: config.viettel_password || '',
+        viettel_tax_code: config.viettel_tax_code || '',
+        updated_at: new Date().toISOString()
+      };
+
+      // Thử thêm các trường nâng cao - Supabase sẽ báo lỗi nếu thiếu cột
+      // nhưng chúng ta sẽ bắt lỗi và thử lại với payload tối giản nếu cần
+      const fullPayload = {
+        ...basePayload,
+        viettel_app_id: config.viettel_app_id || '',
+        viettel_api_url: config.viettel_api_url || '',
+        viettel_is_sandbox: !!config.viettel_is_sandbox,
+      };
+
       const { error } = await supabase
         .from('system_config')
-        .upsert({
-          id: config.id || '00000000-0000-0000-0000-000000000000',
-          bank_name: config.bank_name || '',
-          account_no: config.account_no || '',
-          account_holder: config.account_holder || '',
-          bank_id: config.bank_id || '',
-          viettel_username: config.viettel_username || '',
-          viettel_password: config.viettel_password || '',
-          viettel_tax_code: config.viettel_tax_code || '',
-          viettel_app_id: config.viettel_app_id || '',
-          viettel_api_url: config.viettel_api_url || '',
-          viettel_is_sandbox: !!config.viettel_is_sandbox,
-          updated_at: new Date().toISOString()
-        });
+        .upsert(fullPayload);
 
-      if (error) throw error;
-      alert("Đã cập nhật cấu hình hệ thống thành công!");
-      fetchConfig(); // Refresh
+      if (error) {
+        // Nếu lỗi do thiếu cột (42703), thử lại chỉ với các trường cơ bản
+        if (error.code === '42703') {
+          console.warn("Bảng hệ thống thiếu các cột mới, đang thử lưu các trường cơ bản...");
+          const { error: retryError } = await supabase
+            .from('system_config')
+            .upsert(basePayload);
+          
+          if (retryError) throw retryError;
+          
+          alert("Lưu thành công! Lưu ý: Một số thông tin kỹ thuật (AppID, API URL) chưa được lưu vì bảng database của bạn cần được cập nhật.");
+        } else {
+          throw error;
+        }
+      } else {
+        alert("Đã cập nhật cấu hình hệ thống thành công!");
+      }
+      
+      fetchConfig();
     } catch (error: any) {
       alert("Lỗi khi lưu cấu hình: " + error.message);
       console.error("Config Update Error:", error);
