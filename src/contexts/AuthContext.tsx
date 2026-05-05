@@ -128,25 +128,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(null);
   };
 
-  const role = profile?.role?.toUpperCase();
   const isAdminEmail = user?.email?.toLowerCase()?.trim() === 'binhphan.070582@gmail.com';
-  const calculatedIsAdmin = role === 'ADMIN' || isAdminEmail;
-
-  console.log("Auth Status:", { 
-    email: user?.email, 
-    role, 
-    isAdminEmail, 
-    calculatedIsAdmin,
-    profileId: profile?.id 
-  });
+  const role = profile?.role?.toUpperCase();
+  const calculatedIsAdmin = isAdminEmail || role === 'ADMIN';
 
   const value = useMemo(() => ({
     user,
     profile,
     loading,
     isAdmin: calculatedIsAdmin,
-    isAccountant: role === 'ACCOUNTANT',
-    isSales: (role === 'SALES' || (!role && !isAdminEmail)) && !calculatedIsAdmin,
+    isAccountant: role === 'ACCOUNTANT' && !calculatedIsAdmin,
+    isSales: (role === 'SALES' || !role) && !calculatedIsAdmin,
     isConfigured: isSupabaseConfigured,
     isApproved: profile?.status === 'APPROVED' || isAdminEmail,
     signOut,

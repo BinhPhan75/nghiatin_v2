@@ -784,9 +784,10 @@ const System: React.FC = () => {
                   </div>
                   
                   <div className="input-field">
-                    <label>App ID</label>
+                    <label>App ID <span className="text-neutral-400 font-normal">(Tùy chọn)</span></label>
                     <input 
                       type="text" 
+                      placeholder="Thường không bắt buộc"
                       value={config.viettel_app_id || ''} 
                       onChange={e => {
                         const val = e.target.value;
@@ -796,17 +797,17 @@ const System: React.FC = () => {
                   </div>
 
                   <div className="input-field">
-                    <label>Địa chỉ API (Endpoint)</label>
+                    <label>Địa chỉ API <span className="text-neutral-400 font-normal">(Tùy chọn)</span></label>
                     <input 
                       type="text" 
-                      placeholder="VD: https://sinvoice.viettel.vn/s-invoice-web/api"
+                      placeholder="Mặc định: https://sinvoice.viettel.vn"
                       value={config.viettel_api_url || ''} 
                       onChange={e => {
                         const val = e.target.value;
                         setConfig(prev => prev ? {...prev, viettel_api_url: val} : null);
                       }}
                     />
-                    <p className="text-[9px] text-neutral-400 mt-1 italic">Địa chỉ URL được Viettel cung cấp để gửi nhận dữ liệu hóa đơn.</p>
+                    <p className="text-[9px] text-neutral-400 mt-1 italic">Để trống nếu bạn sử dụng máy chủ tiêu chuẩn của Viettel.</p>
                   </div>
 
                   <div className="flex items-center gap-2 py-2">
