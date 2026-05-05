@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS public.transactions (
 );
 
 -- ==========================================
--- 5. SYSTEM CONFIG (Shop & E-Invoice)
+-- 5. SYSTEM CONFIG (Basics)
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.system_config (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -141,20 +141,25 @@ CREATE TABLE IF NOT EXISTS public.system_config (
   account_no TEXT,
   account_holder TEXT,
   bank_id TEXT, -- Short name/ID code for VietQR (e.g. VCB)
-  
-  -- Viettel vInvoice Config
-  viettel_username TEXT,
-  viettel_password TEXT,
-  viettel_tax_code TEXT,
-  viettel_app_id TEXT,
-  viettel_api_url TEXT,
-  viettel_is_sandbox BOOLEAN DEFAULT false,
-  
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ==========================================
--- 6. SECURITY (Row Level Security)
+-- 6. VIETTEL CONFIG (Dedicated)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.viettel_config (
+  id UUID PRIMARY KEY DEFAULT '00000000-0000-0000-0000-000000000000',
+  username TEXT DEFAULT '',
+  password TEXT DEFAULT '',
+  tax_code TEXT DEFAULT '',
+  app_id TEXT DEFAULT '',
+  api_url TEXT DEFAULT '',
+  is_sandbox BOOLEAN DEFAULT true,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- 7. SECURITY (Row Level Security)
 -- ==========================================
 
 -- Enable RLS
@@ -163,6 +168,7 @@ ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.banks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.viettel_config ENABLE ROW LEVEL SECURITY;
 
 -- Profiles Policies
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
@@ -201,6 +207,14 @@ DROP POLICY IF EXISTS "System config viewable by everyone" ON public.system_conf
 DROP POLICY IF EXISTS "Admins can update system config" ON public.system_config;
 CREATE POLICY "System config viewable by everyone" ON public.system_config FOR SELECT USING (true);
 CREATE POLICY "Admins can update system config" ON public.system_config FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
+);
+
+-- Viettel Config Policies
+DROP POLICY IF EXISTS "Viettel config viewable by everyone" ON public.viettel_config;
+DROP POLICY IF EXISTS "Admins can update viettel config" ON public.viettel_config;
+CREATE POLICY "Viettel config viewable by everyone" ON public.viettel_config FOR SELECT USING (true);
+CREATE POLICY "Admins can update viettel config" ON public.viettel_config FOR ALL USING (
   EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
 );
 

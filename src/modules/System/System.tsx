@@ -27,6 +27,7 @@ const System: React.FC = () => {
   // Data State
   const [products, setProducts] = useState<Product[]>([]);
   const [config, setConfig] = useState<SystemConfig | null>(null);
+  const [viettelConfig, setViettelConfig] = useState<any>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [editingPrices, setEditingPrices] = useState<Record<string, { buy_price: number; sell_price: number }>>({});
@@ -41,11 +42,12 @@ const System: React.FC = () => {
   const [dbStatus, setDbStatus] = useState<{ loading: boolean; connected: boolean; message: string }>({ 
     loading: false, connected: false, message: 'Chưa thực hiện kiểm tra' 
   });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLastError(null);
     fetchProducts();
-    fetchConfig();
+    fetchConfigs();
     fetchBanks();
     if (isAdmin || activeTab === 'users') fetchProfiles();
     if (activeTab === 'diagnostics') checkConnection();
@@ -53,16 +55,17 @@ const System: React.FC = () => {
 
   const checkConnection = async () => {
     setDbStatus({ loading: true, connected: false, message: 'Đang kết nối tới database...' });
-    const { data, error } = await supabase.from('products').select('id').limit(1);
-    if (error) {
+    try {
+      const { data, error } = await supabase.from('products').select('id').limit(1);
+      if (error) throw error;
+      setDbStatus({ loading: false, connected: true, message: 'Kết nối thành công! Database hoạt động bình thường.' });
+    } catch (error: any) {
       setDbStatus({ 
         loading: false, 
         connected: false, 
         message: `Lỗi kết nối: ${error.message || 'Không thể truy cập Supabase.'}` 
       });
       setLastError(error);
-    } else {
-      setDbStatus({ loading: false, connected: true, message: 'Kết nối thành công! Database hoạt động bình thường.' });
     }
   };
 
@@ -78,27 +81,48 @@ const System: React.FC = () => {
     }
   };
 
-  const fetchConfig = async () => {
-    const { data: snapshot, error: fetchError } = await supabase.from('system_config').select('*').limit(1);
-    
-    if (fetchError) {
-      console.error("Lỗi khi tải cấu hình:", fetchError);
-      return;
-    }
+  const fetchConfigs = async () => {
+    setLoading(true);
+    try {
+      // 1. Fetch system general config
+      const { data: sysData, error: sysError } = await supabase.from('system_config').select('*').limit(1);
+      if (sysError) console.error("Lỗi khi tải cấu hình hệ thống:", sysError);
+      
+      if (sysData && sysData.length > 0) {
+        setConfig(sysData[0]);
+      } else {
+        setConfig({
+          id: '00000000-0000-0000-0000-000000000000',
+          bank_name: '',
+          account_no: '',
+          account_holder: '',
+          bank_id: ''
+        } as any);
+      }
 
-    if (snapshot && snapshot.length > 0) {
-      setConfig(snapshot[0]);
-    } else {
-      // Khởi tạo mẫu mặc định nếu chưa có cấu hình nào
-      setConfig({
-        id: '00000000-0000-0000-0000-000000000000',
-        viettel_is_sandbox: true,
-        viettel_username: '',
-        viettel_password: '',
-        viettel_tax_code: '',
-        viettel_app_id: '',
-        viettel_api_url: ''
-      } as any);
+      // 2. Fetch viettel specific config
+      const { data: vData, error: vError } = await supabase.from('viettel_config').select('*').limit(1);
+      if (vError && vError.code !== '42P01') {
+        console.error("Lỗi khi tải cấu hình Viettel:", vError);
+      }
+
+      if (vData && vData.length > 0) {
+        setViettelConfig(vData[0]);
+      } else {
+        setViettelConfig({
+          id: '00000000-0000-0000-0000-000000000000',
+          username: '',
+          password: '',
+          tax_code: '',
+          app_id: '',
+          api_url: '',
+          is_sandbox: true
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching configs:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -246,58 +270,56 @@ const System: React.FC = () => {
     if (!config) return;
 
     try {
-      // 1. Chuẩn bị payload cơ bản (chắc chắn có trong DB cũ)
-      const basePayload = {
-        id: config.id || '00000000-0000-0000-0000-000000000000',
-        bank_name: config.bank_name || '',
-        account_no: config.account_no || '',
-        account_holder: config.account_holder || '',
-        bank_id: config.bank_id || '',
-        viettel_username: config.viettel_username || '',
-        viettel_password: config.viettel_password || '',
-        viettel_tax_code: config.viettel_tax_code || '',
-        updated_at: new Date().toISOString()
-      };
-
-      // 2. Chuẩn bị payload đầy đủ
-      const fullPayload = {
-        ...basePayload,
-        viettel_app_id: config.viettel_app_id || '',
-        viettel_api_url: config.viettel_api_url || '',
-        viettel_is_sandbox: !!config.viettel_is_sandbox,
-      };
-
-      // 3. Thử lưu bản đầy đủ
       const { error } = await supabase
         .from('system_config')
-        .upsert(fullPayload);
+        .upsert({
+          id: config.id || '00000000-0000-0000-0000-000000000000',
+          bank_name: config.bank_name || '',
+          account_no: config.account_no || '',
+          account_holder: config.account_holder || '',
+          bank_id: config.bank_id || '',
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      alert("Đã cập nhật cấu hình tài khoản ngân hàng thành công!");
+      fetchConfigs();
+    } catch (error: any) {
+      alert("Lỗi khi lưu cấu hình: " + error.message);
+      console.error("Config Update Error:", error);
+    }
+  };
+
+  const handleUpdateViettelConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!viettelConfig) return;
+
+    try {
+      const { error } = await supabase
+        .from('viettel_config')
+        .upsert({
+          id: viettelConfig.id || '00000000-0000-0000-0000-000000000000',
+          username: viettelConfig.username || '',
+          password: viettelConfig.password || '',
+          tax_code: viettelConfig.tax_code || '',
+          app_id: viettelConfig.app_id || '',
+          api_url: viettelConfig.api_url || '',
+          is_sandbox: !!viettelConfig.is_sandbox,
+          updated_at: new Date().toISOString()
+        });
 
       if (error) {
-        // Kiểm tra nếu lỗi là do thiếu cột (col not found)
-        const isColumnError = error.code === '42703' || 
-                             error.message?.includes('column') || 
-                             error.message?.includes('schema cache');
-
-        if (isColumnError) {
-          console.warn("Database thiếu cột kỹ thuật mới, đang lưu bản rút gọn...");
-          const { error: retryError } = await supabase
-            .from('system_config')
-            .upsert(basePayload);
-          
-          if (retryError) throw retryError;
-          
-          alert("Đã lưu thành công các thông tin cơ bản! (Một số tùy chọn nâng cao chưa được lưu do Database của bạn cần cập nhật SQL)");
+        if (error.code === '42P01') {
+          alert("Lỗi: Bảng 'viettel_config' chưa tồn tại. Vui lòng chạy script SQL được cung cấp để tạo bảng.");
         } else {
           throw error;
         }
       } else {
-        alert("Đã cập nhật cấu hình hệ thống thành công!");
+        alert("Đã cập nhật cấu hình Viettel thành công!");
       }
-      
-      fetchConfig();
+      fetchConfigs();
     } catch (error: any) {
-      alert("Lỗi khi lưu cấu hình: " + error.message);
-      console.error("Config Update Error:", error);
+      alert("Lỗi khi lưu cấu hình Viettel: " + error.message);
     }
   };
 
@@ -780,8 +802,8 @@ const System: React.FC = () => {
                 Vui lòng nhập đúng tài khoản được Viettel cung cấp trong thư bàn giao dịch vụ.
               </p>
 
-              {config && (
-                <form onSubmit={handleUpdateConfig} className="flex flex-col gap-8">
+              {viettelConfig && (
+                <form onSubmit={handleUpdateViettelConfig} className="flex flex-col gap-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Cấu hình cơ bản */}
                     <div className="space-y-4">
@@ -792,10 +814,10 @@ const System: React.FC = () => {
                         <input 
                           type="text" 
                           placeholder="VD: MST_User"
-                          value={config.viettel_username || ''} 
+                          value={viettelConfig.username || ''} 
                           onChange={e => {
                             const val = e.target.value;
-                            setConfig(prev => prev ? {...prev, viettel_username: val} : null);
+                            setViettelConfig(prev => prev ? {...prev, username: val} : null);
                           }}
                           required
                         />
@@ -805,10 +827,10 @@ const System: React.FC = () => {
                         <label>Mật khẩu (Password) <span className="text-red-500">*</span></label>
                         <input 
                           type="password" 
-                          value={config.viettel_password || ''} 
+                          value={viettelConfig.password || ''} 
                           onChange={e => {
                             const val = e.target.value;
-                            setConfig(prev => prev ? {...prev, viettel_password: val} : null);
+                            setViettelConfig(prev => prev ? {...prev, password: val} : null);
                           }}
                           required
                         />
@@ -819,10 +841,10 @@ const System: React.FC = () => {
                         <input 
                           type="text" 
                           placeholder="VD: 0101234567"
-                          value={config.viettel_tax_code || ''} 
+                          value={viettelConfig.tax_code || ''} 
                           onChange={e => {
                             const val = e.target.value;
-                            setConfig(prev => prev ? {...prev, viettel_tax_code: val} : null);
+                            setViettelConfig(prev => prev ? {...prev, tax_code: val} : null);
                           }}
                           required
                         />
@@ -838,10 +860,10 @@ const System: React.FC = () => {
                         <input 
                           type="text" 
                           placeholder="Để trống nếu không rõ"
-                          value={config.viettel_app_id || ''} 
+                          value={viettelConfig.app_id || ''} 
                           onChange={e => {
                             const val = e.target.value;
-                            setConfig(prev => prev ? {...prev, viettel_app_id: val} : null);
+                            setViettelConfig(prev => prev ? {...prev, app_id: val} : null);
                           }}
                         />
                       </div>
@@ -851,10 +873,10 @@ const System: React.FC = () => {
                         <input 
                           type="text" 
                           placeholder="Mặc định: https://sinvoice.viettel.vn"
-                          value={config.viettel_api_url || ''} 
+                          value={viettelConfig.api_url || ''} 
                           onChange={e => {
                             const val = e.target.value;
-                            setConfig(prev => prev ? {...prev, viettel_api_url: val} : null);
+                            setViettelConfig(prev => prev ? {...prev, api_url: val} : null);
                           }}
                         />
                         <p className="text-[9px] text-neutral-400 mt-1 italic">Chỉ thay đổi nếu bạn sử dụng máy chủ riêng/đặc thù.</p>
@@ -864,10 +886,10 @@ const System: React.FC = () => {
                         <input 
                           type="checkbox" 
                           id="isSandbox"
-                          checked={config.viettel_is_sandbox || false}
+                          checked={viettelConfig.is_sandbox || false}
                           onChange={e => {
                             const checked = e.target.checked;
-                            setConfig(prev => prev ? {...prev, viettel_is_sandbox: checked} : null);
+                            setViettelConfig(prev => prev ? {...prev, is_sandbox: checked} : null);
                           }}
                           className="w-4 h-4 accent-gold-primary"
                         />
