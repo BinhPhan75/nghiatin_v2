@@ -244,24 +244,25 @@ const System: React.FC = () => {
         .from('system_config')
         .upsert({
           id: config.id || '00000000-0000-0000-0000-000000000000',
-          bank_name: config.bank_name,
-          account_no: config.account_no,
-          account_holder: config.account_holder,
-          bank_id: config.bank_id,
-          viettel_username: config.viettel_username,
-          viettel_password: config.viettel_password,
-          viettel_tax_code: config.viettel_tax_code,
-          viettel_app_id: config.viettel_app_id,
-          viettel_api_url: config.viettel_api_url,
-          viettel_is_sandbox: config.viettel_is_sandbox,
+          bank_name: config.bank_name || '',
+          account_no: config.account_no || '',
+          account_holder: config.account_holder || '',
+          bank_id: config.bank_id || '',
+          viettel_username: config.viettel_username || '',
+          viettel_password: config.viettel_password || '',
+          viettel_tax_code: config.viettel_tax_code || '',
+          viettel_app_id: config.viettel_app_id || '',
+          viettel_api_url: config.viettel_api_url || '',
+          viettel_is_sandbox: !!config.viettel_is_sandbox,
           updated_at: new Date().toISOString()
         });
 
       if (error) throw error;
-      alert("Đã cập nhật cấu hình hệ thống");
+      alert("Đã cập nhật cấu hình hệ thống thành công!");
       fetchConfig(); // Refresh
     } catch (error: any) {
       alert("Lỗi khi lưu cấu hình: " + error.message);
+      console.error("Config Update Error:", error);
     }
   };
 

@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS public.system_config (
   viettel_password TEXT,
   viettel_tax_code TEXT,
   viettel_app_id TEXT,
+  viettel_api_url TEXT,
   viettel_is_sandbox BOOLEAN DEFAULT false,
   
   updated_at TIMESTAMPTZ DEFAULT NOW()
