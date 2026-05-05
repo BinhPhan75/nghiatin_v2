@@ -6,26 +6,24 @@ import { supabase } from '../lib/supabase';
  */
 
 interface ViettelConfig {
-  viettel_username?: string;
-  viettel_password?: string;
-  viettel_tax_code?: string;
-  viettel_api_url?: string;
-  viettel_is_sandbox?: boolean;
+  username?: string;
+  password?: string;
+  tax_code?: string;
+  api_url?: string;
+  is_sandbox?: boolean;
 }
 
 const getViettelConfig = async (): Promise<ViettelConfig | null> => {
-  const { data, error } = await supabase.from('system_config').select('*').single();
+  const { data, error } = await supabase.from('viettel_config').select('*').limit(1).single();
   if (error || !data) return null;
   return data;
 };
 
 const getBaseUrl = (config: ViettelConfig) => {
-  if (config.viettel_api_url) {
-    return config.viettel_api_url.replace(/\/$/, '');
+  if (config.api_url) {
+    return config.api_url.replace(/\/$/, '');
   }
-  return config.viettel_is_sandbox 
-    ? 'https://sinvoice.viettel.vn/InvoiceAPI/InvoiceWS' // Sandbox/Trial
-    : 'https://sinvoice.viettel.vn/InvoiceAPI/InvoiceWS'; // Production
+  return 'https://sinvoice.viettel.vn/InvoiceAPI/InvoiceWS';
 };
 
 /**
@@ -35,8 +33,8 @@ export const loginViettel = async (config: ViettelConfig) => {
   const url = `${getBaseUrl(config)}/login`;
   try {
     const response = await axios.post(url, {
-      username: config.viettel_username,
-      password: config.viettel_password
+      username: config.username,
+      password: config.password
     });
     return response.data;
   } catch (error) {
@@ -50,7 +48,7 @@ export const loginViettel = async (config: ViettelConfig) => {
  */
 export const createViettelInvoice = async (transactionId: string) => {
   const config = await getViettelConfig();
-  if (!config || !config.viettel_username || !config.viettel_password) {
+  if (!config || !config.username || !config.password) {
     throw new Error('Chưa cấu hình thông tin Viettel vInvoice trong hệ thống.');
   }
 
@@ -75,7 +73,7 @@ export const createViettelInvoice = async (transactionId: string) => {
       adjustmentType: '1', // 1: Gốc
       paymentStatus: '1', // 1: Đã thanh toán
       paymentMethodName: tx.tien_mat > 0 ? 'Tiền mặt' : 'Chuyển khoản',
-      taxCode: config.viettel_tax_code,
+      taxCode: config.tax_code,
     },
     buyerInfo: {
       buyerName: tx.customer_name,
@@ -110,13 +108,13 @@ export const createViettelInvoice = async (transactionId: string) => {
   try {
     // 3. Call Viettel API
     // This typically requires Authorization header with credentials or Token
-    const url = `${getBaseUrl(config)}/createInvoice/${config.viettel_tax_code}`;
+    const url = `${getBaseUrl(config)}/createInvoice/${config.tax_code}`;
     
     // Using basic auth or custom auth header as per Viettel requirement
     const response = await axios.post(url, payload, {
       auth: {
-        username: config.viettel_username,
-        password: config.viettel_password
+        username: config.username,
+        password: config.password
       }
     });
 
