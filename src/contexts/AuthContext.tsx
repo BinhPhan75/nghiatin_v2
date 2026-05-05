@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { Profile, UserRole } from '../types';
@@ -48,7 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id, session.user.email);
       } else {
         setLoading(false);
       }
@@ -60,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (session?.user) {
         setUser(session.user);
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id, session.user.email);
         updateLastSeen(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -95,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const fetchProfile = async (uid: string) => {
+  const fetchProfile = async (uid: string, email?: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -108,10 +108,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error("Profile fetch error, using fallback matching email:", err);
       // Fallback for when profile doesn't exist yet but user is logged in
-      const isAdminEmail = user?.email?.toLowerCase() === 'binhphan.070582@gmail.com';
+      const effectiveEmail = email || user?.email || '';
+      const isAdminEmail = effectiveEmail.toLowerCase().trim() === 'binhphan.070582@gmail.com';
       setProfile({
         id: uid,
-        email: user?.email || '',
+        email: effectiveEmail,
         role: isAdminEmail ? 'ADMIN' : 'SALES',
         status: 'APPROVED',
         created_at: new Date().toISOString(),
@@ -128,10 +129,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const role = profile?.role?.toUpperCase();
-  const isAdminEmail = user?.email?.toLowerCase() === 'binhphan.070582@gmail.com';
+  const isAdminEmail = user?.email?.toLowerCase()?.trim() === 'binhphan.070582@gmail.com';
   const calculatedIsAdmin = role === 'ADMIN' || isAdminEmail;
 
-  const value = {
+  console.log("Auth Status:", { 
+    email: user?.email, 
+    role, 
+    isAdminEmail, 
+    calculatedIsAdmin,
+    profileId: profile?.id 
+  });
+
+  const value = useMemo(() => ({
     user,
     profile,
     loading,
@@ -141,7 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isConfigured: isSupabaseConfigured,
     isApproved: profile?.status === 'APPROVED' || isAdminEmail,
     signOut,
-  };
+  }), [user, profile, loading, calculatedIsAdmin, role, isAdminEmail, isSupabaseConfigured]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

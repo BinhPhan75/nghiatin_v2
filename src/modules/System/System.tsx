@@ -20,7 +20,8 @@ const System: React.FC = () => {
 
   const filteredTabs = tabs.filter(t => {
     if (isAdmin) return true; // Admins always see all tabs
-    return t.roles.includes(profile?.role || '');
+    const userRole = profile?.role || '';
+    return t.roles.includes(userRole);
   });
   
   // Data State
@@ -738,7 +739,10 @@ const System: React.FC = () => {
                       type="text" 
                       placeholder="VD: MST_User"
                       value={config.viettel_username || ''} 
-                      onChange={e => setConfig({...config, viettel_username: e.target.value})}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setConfig(prev => prev ? {...prev, viettel_username: val} : null);
+                      }}
                     />
                   </div>
 
@@ -747,7 +751,10 @@ const System: React.FC = () => {
                     <input 
                       type="password" 
                       value={config.viettel_password || ''} 
-                      onChange={e => setConfig({...config, viettel_password: e.target.value})}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setConfig(prev => prev ? {...prev, viettel_password: val} : null);
+                      }}
                     />
                   </div>
 
@@ -756,7 +763,10 @@ const System: React.FC = () => {
                     <input 
                       type="text" 
                       value={config.viettel_tax_code || ''} 
-                      onChange={e => setConfig({...config, viettel_tax_code: e.target.value})}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setConfig(prev => prev ? {...prev, viettel_tax_code: val} : null);
+                      }}
                     />
                   </div>
                   
@@ -765,7 +775,10 @@ const System: React.FC = () => {
                     <input 
                       type="text" 
                       value={config.viettel_app_id || ''} 
-                      onChange={e => setConfig({...config, viettel_app_id: e.target.value})}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setConfig(prev => prev ? {...prev, viettel_app_id: val} : null);
+                      }}
                     />
                   </div>
 
@@ -775,7 +788,10 @@ const System: React.FC = () => {
                       type="text" 
                       placeholder="VD: https://sinvoice.viettel.vn/s-invoice-web/api"
                       value={config.viettel_api_url || ''} 
-                      onChange={e => setConfig({...config, viettel_api_url: e.target.value})}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setConfig(prev => prev ? {...prev, viettel_api_url: val} : null);
+                      }}
                     />
                     <p className="text-[9px] text-neutral-400 mt-1 italic">Địa chỉ URL được Viettel cung cấp để gửi nhận dữ liệu hóa đơn.</p>
                   </div>
@@ -785,7 +801,10 @@ const System: React.FC = () => {
                       type="checkbox" 
                       id="isSandbox"
                       checked={config.viettel_is_sandbox || false}
-                      onChange={e => setConfig({...config, viettel_is_sandbox: e.target.checked})}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        setConfig(prev => prev ? {...prev, viettel_is_sandbox: checked} : null);
+                      }}
                       className="w-4 h-4 accent-gold-primary"
                     />
                     <label htmlFor="isSandbox" className="text-sm font-bold cursor-pointer">Sử dụng môi trường thử nghiệm (Sandbox)</label>
@@ -904,42 +923,52 @@ const UserCard: React.FC<{
   showRoleUpdate: string | null,
   setShowRoleUpdate: (val: string | null) => void,
   handleUpdateRole: (id: string, role: UserRole) => void
-}> = ({ p, isAdmin, currentProfile, showRoleUpdate, setShowRoleUpdate, handleUpdateRole }) => (
-  <div className="p-6 border border-neutral-100 rounded-sm relative overflow-hidden group bg-white shadow-sm hover:shadow-md transition-shadow">
-    <div className={`absolute top-0 right-0 w-20 h-20 -mr-10 -mt-10 rotate-45 opacity-10 transition-transform group-hover:scale-110 ${p.role === 'ADMIN' ? 'bg-red-500' : 'bg-gold-primary'}`}></div>
-    <div className="flex flex-col gap-1 mb-4">
-      <div className="flex justify-between items-start">
-        <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-          {p.role === 'ADMIN' ? 'Quản trị viên' : p.role === 'ACCOUNTANT' ? 'Kế toán' : 'Bán hàng'}
-        </span>
-        <div className="flex items-center gap-2">
-          {isOnline(p.last_seen_at) ? (
-            <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-              Trực tuyến
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-500">
-              <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full"></span>
-              Ngoại tuyến
-            </span>
-          )}
+}> = ({ p, isAdmin, currentProfile, showRoleUpdate, setShowRoleUpdate, handleUpdateRole }) => {
+  const isAdminEmail = p.email.toLowerCase().trim() === 'binhphan.070582@gmail.com';
+  const displayRole = (p.role === 'ADMIN' || isAdminEmail) ? 'Quản trị viên' : p.role === 'ACCOUNTANT' ? 'Kế toán' : 'Bán hàng';
+  const isMe = p.email === currentProfile?.email;
+
+  return (
+    <div className={`p-6 border rounded-sm relative overflow-hidden group bg-white shadow-sm hover:shadow-md transition-shadow ${isMe ? 'border-gold-primary ring-1 ring-gold-primary/20' : 'border-neutral-100'}`}>
+      <div className={`absolute top-0 right-0 w-20 h-20 -mr-10 -mt-10 rotate-45 opacity-10 transition-transform group-hover:scale-110 ${isAdminEmail || p.role === 'ADMIN' ? 'bg-red-500' : 'bg-gold-primary'}`}></div>
+      {isMe && (
+        <div className="absolute top-2 right-2 flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-gold-dark bg-gold-primary/10 px-2 py-0.5 rounded-full border border-gold-primary/30">
+          Bạn
         </div>
+      )}
+      <div className="flex flex-col gap-1 mb-4">
+        <div className="flex justify-between items-start">
+          <span className={`text-[10px] font-black uppercase tracking-widest ${isAdminEmail || p.role === 'ADMIN' ? 'text-red-500' : 'text-neutral-400'}`}>
+            {displayRole}
+          </span>
+          <div className="flex items-center gap-2">
+            {isOnline(p.last_seen_at) ? (
+              <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                Trực tuyến
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-500">
+                <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full"></span>
+                Ngoại tuyến
+              </span>
+            )}
+          </div>
+        </div>
+        <h4 className="text-lg font-bold lowercase italic">{p.full_name || p.email.split('@')[0]}</h4>
       </div>
-      <h4 className="text-lg font-bold lowercase italic">{p.full_name || p.email.split('@')[0]}</h4>
-    </div>
-    <div className="text-xs font-medium text-neutral-500 mb-6">
-      <p className="truncate" title={p.email}>{p.email}</p>
-      <p className="mt-1">Tham gia: {new Date(p.created_at).toLocaleDateString('vi-VN')}</p>
-    </div>
-    {isAdmin && p.email !== currentProfile?.email && (
-      <div className="flex flex-col gap-3">
-        <button 
-          onClick={() => setShowRoleUpdate(showRoleUpdate === p.id ? null : p.id)}
-          className="text-[10px] font-black uppercase text-neutral-400 hover:text-ink transition-colors text-left flex items-center gap-1"
-        >
-          {showRoleUpdate === p.id ? 'Hủy bỏ' : 'Thay đổi quyền'}
-        </button>
+      <div className="text-xs font-medium text-neutral-500 mb-6">
+        <p className="truncate" title={p.email}>{p.email}</p>
+        <p className="mt-1">Tham gia: {new Date(p.created_at).toLocaleDateString('vi-VN')}</p>
+      </div>
+      {isAdmin && !isMe && (
+        <div className="flex flex-col gap-3">
+          <button 
+            onClick={() => setShowRoleUpdate(showRoleUpdate === p.id ? null : p.id)}
+            className="text-[10px] font-black uppercase text-neutral-400 hover:text-ink transition-colors text-left flex items-center gap-1"
+          >
+            {showRoleUpdate === p.id ? 'Hủy bỏ' : 'Thay đổi quyền'}
+          </button>
         
         {showRoleUpdate === p.id && (
           <div className="flex gap-2 mt-1">
