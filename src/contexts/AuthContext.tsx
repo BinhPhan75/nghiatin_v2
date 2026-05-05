@@ -128,8 +128,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(null);
   };
 
-  const isAdminEmail = user?.email?.toLowerCase()?.trim() === 'binhphan.070582@gmail.com';
   const role = profile?.role?.toUpperCase();
+  const isAdminEmail = user?.email?.toLowerCase()?.trim() === 'binhphan.070582@gmail.com';
   const calculatedIsAdmin = isAdminEmail || role === 'ADMIN';
 
   const value = useMemo(() => ({
