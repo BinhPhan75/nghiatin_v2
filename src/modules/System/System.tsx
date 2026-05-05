@@ -82,6 +82,17 @@ const System: React.FC = () => {
     const { data: snapshot } = await supabase.from('system_config').select('*').limit(1);
     if (snapshot && snapshot.length > 0) {
       setConfig(snapshot[0]);
+    } else {
+      // Initialize with default template if no config exists yet
+      setConfig({
+        id: '00000000-0000-0000-0000-000000000000',
+        viettel_is_sandbox: true,
+        viettel_username: '',
+        viettel_password: '',
+        viettel_tax_code: '',
+        viettel_app_id: '',
+        viettel_api_url: ''
+      } as any);
     }
   };
 
@@ -231,7 +242,8 @@ const System: React.FC = () => {
     try {
       const { error } = await supabase
         .from('system_config')
-        .update({
+        .upsert({
+          id: config.id || '00000000-0000-0000-0000-000000000000',
           bank_name: config.bank_name,
           account_no: config.account_no,
           account_holder: config.account_holder,
@@ -241,12 +253,13 @@ const System: React.FC = () => {
           viettel_tax_code: config.viettel_tax_code,
           viettel_app_id: config.viettel_app_id,
           viettel_api_url: config.viettel_api_url,
-          viettel_is_sandbox: config.viettel_is_sandbox
-        })
-        .eq('id', config.id);
+          viettel_is_sandbox: config.viettel_is_sandbox,
+          updated_at: new Date().toISOString()
+        });
 
       if (error) throw error;
       alert("Đã cập nhật cấu hình hệ thống");
+      fetchConfig(); // Refresh
     } catch (error: any) {
       alert("Lỗi khi lưu cấu hình: " + error.message);
     }
@@ -986,4 +999,5 @@ const UserCard: React.FC<{
       </div>
     )}
   </div>
-);
+  );
+};
