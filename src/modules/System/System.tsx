@@ -302,6 +302,8 @@ const System: React.FC = () => {
           username: viettelConfig.username || '',
           password: viettelConfig.password || '',
           tax_code: viettelConfig.tax_code || '',
+          template_code: viettelConfig.template_code || '',
+          invoice_series: viettelConfig.invoice_series || '',
           app_id: viettelConfig.app_id || '',
           api_url: viettelConfig.api_url || '',
           is_sandbox: !!viettelConfig.is_sandbox,
@@ -848,6 +850,35 @@ const System: React.FC = () => {
                           }}
                           required
                         />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="input-field">
+                          <label>Mẫu số (Template Code) <span className="text-red-500">*</span></label>
+                          <input 
+                            type="text" 
+                            placeholder="VD: 1/001"
+                            value={viettelConfig.template_code || ''} 
+                            onChange={e => {
+                              const val = e.target.value;
+                              setViettelConfig(prev => prev ? {...prev, template_code: val} : null);
+                            }}
+                            required
+                          />
+                        </div>
+                        <div className="input-field">
+                          <label>Ký hiệu (Series) <span className="text-red-500">*</span></label>
+                          <input 
+                            type="text" 
+                            placeholder="VD: C22TGG"
+                            value={viettelConfig.invoice_series || ''} 
+                            onChange={e => {
+                              const val = e.target.value;
+                              setViettelConfig(prev => prev ? {...prev, invoice_series: val} : null);
+                            }}
+                            required
+                          />
+                        </div>
                       </div>
                     </div>
 

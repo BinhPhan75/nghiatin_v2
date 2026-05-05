@@ -154,6 +154,8 @@ CREATE TABLE IF NOT EXISTS public.viettel_config (
   tax_code TEXT DEFAULT '',
   app_id TEXT DEFAULT '',
   api_url TEXT DEFAULT '',
+  template_code TEXT DEFAULT '',
+  invoice_series TEXT DEFAULT '',
   is_sandbox BOOLEAN DEFAULT true,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

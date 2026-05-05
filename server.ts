@@ -98,6 +98,39 @@ async function startServer() {
     }
   });
 
+  // Viettel Proxy Route
+  app.post('/api/viettel-proxy', async (req, res) => {
+    const { endpoint, method, payload, config } = req.body;
+
+    if (!config || !config.username || !config.password) {
+      return res.status(400).json({ error: 'Thiếu cấu hình Viettel' });
+    }
+
+    try {
+      const authHeader = Buffer.from(`${config.username}:${config.password}`).toString('base64');
+      
+      const response = await axios({
+        url: endpoint,
+        method: method || 'POST',
+        data: payload,
+        headers: {
+          'Authorization': `Basic ${authHeader}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        timeout: 90000 // Viettel recommends 60-90s timeout
+      });
+
+      res.json(response.data);
+    } catch (error: any) {
+      console.error('Viettel Proxy Error:', error.response?.data || error.message);
+      res.status(error.response?.status || 500).json({
+        error: 'Lỗi kết nối Viettel qua Proxy',
+        details: error.response?.data || error.message
+      });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
