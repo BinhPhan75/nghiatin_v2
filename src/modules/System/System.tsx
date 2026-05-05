@@ -295,22 +295,32 @@ const System: React.FC = () => {
     if (!viettelConfig) return;
 
     try {
+      const fullPayload = {
+        id: viettelConfig.id || '00000000-0000-0000-0000-000000000000',
+        username: viettelConfig.username || '',
+        password: viettelConfig.password || '',
+        tax_code: viettelConfig.tax_code || '',
+        template_code: viettelConfig.template_code || '',
+        invoice_series: viettelConfig.invoice_series || '',
+        app_id: viettelConfig.app_id || '',
+        api_url: viettelConfig.api_url || '',
+        is_sandbox: !!viettelConfig.is_sandbox,
+        updated_at: new Date().toISOString()
+      };
+
       const { error } = await supabase
         .from('viettel_config')
-        .upsert({
-          id: viettelConfig.id || '00000000-0000-0000-0000-000000000000',
-          username: viettelConfig.username || '',
-          password: viettelConfig.password || '',
-          tax_code: viettelConfig.tax_code || '',
-          template_code: viettelConfig.template_code || '',
-          invoice_series: viettelConfig.invoice_series || '',
-          app_id: viettelConfig.app_id || '',
-          api_url: viettelConfig.api_url || '',
-          is_sandbox: !!viettelConfig.is_sandbox,
-          updated_at: new Date().toISOString()
-        });
+        .upsert(fullPayload);
 
       if (error) {
+        // Kiểm tra lỗi thiếu cột
+        const isColumnError = error.code === '42703' || error.message?.includes('column');
+        
+        if (isColumnError) {
+          alert("Lỗi: Database của bạn thiếu cột 'template_code' hoặc 'invoice_series'. Vui lòng chạy lại script SQL mới nhất trong tab 'Bảo trì' hoặc Supabase Dashboard.");
+          return;
+        }
+        
         if (error.code === '42P01') {
           alert("Lỗi: Bảng 'viettel_config' chưa tồn tại. Vui lòng chạy script SQL được cung cấp để tạo bảng.");
         } else {

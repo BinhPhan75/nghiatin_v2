@@ -160,6 +160,10 @@ CREATE TABLE IF NOT EXISTS public.viettel_config (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Ensure columns exist if table was created earlier
+ALTER TABLE public.viettel_config ADD COLUMN IF NOT EXISTS template_code TEXT DEFAULT '';
+ALTER TABLE public.viettel_config ADD COLUMN IF NOT EXISTS invoice_series TEXT DEFAULT '';
+
 -- ==========================================
 -- 7. SECURITY (Row Level Security)
 -- ==========================================
