@@ -201,10 +201,10 @@ FOR SELECT USING (true);
 CREATE POLICY "Users can update own profile" ON public.profiles 
 FOR UPDATE USING (auth.uid() = id);
 
--- Use the helper function but also add a direct JWT check to be absolutely safe against recursion
+-- Use a direct JWT check to be absolutely safe against recursion for the profiles table itself
 CREATE POLICY "Admins can manage profiles" ON public.profiles 
 FOR ALL USING (
-  (auth.jwt() ->> 'email' = 'binhphan.070582@gmail.com') OR public.is_admin()
+  (auth.jwt() ->> 'email' = 'binhphan.070582@gmail.com')
 );
 
 -- Banks Policies

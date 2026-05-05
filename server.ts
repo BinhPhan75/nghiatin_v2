@@ -109,6 +109,8 @@ async function startServer() {
     try {
       const authHeader = Buffer.from(`${config.username}:${config.password}`).toString('base64');
       
+      console.log(`[Proxy] Calling Viettel: ${method || 'POST'} ${endpoint}`);
+
       const response = await axios({
         url: endpoint,
         method: method || 'POST',

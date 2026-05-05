@@ -23,14 +23,10 @@ const getViettelConfig = async (): Promise<ViettelConfig | null> => {
 
 const getBaseUrl = (config: ViettelConfig) => {
   if (config.api_url) {
-    let url = config.api_url.trim();
-    if (!url.endsWith('/InvoiceAPI')) {
-       url = url.replace(/\/$/, '') + '/InvoiceAPI';
-    }
-    return url;
+    return config.api_url.trim().replace(/\/$/, '');
   }
   return config.is_sandbox 
-    ? 'https://demo-sinvoice.viettel.vn:8443/InvoiceAPI'
+    ? 'https://demo-sinvoice.viettel.vn:8443'
     : 'https://api-sinvoice.viettel.vn:443';
 };
 
@@ -38,7 +34,7 @@ const getBaseUrl = (config: ViettelConfig) => {
  * Login to get Session/Token
  */
 export const loginViettel = async (config: ViettelConfig) => {
-  const endpoint = `${getBaseUrl(config)}/InvoiceWS/login`;
+  const endpoint = `${getBaseUrl(config)}/InvoiceAPI/InvoiceWS/login`;
   try {
     const response = await axios.post('/api/viettel-proxy', {
       endpoint,
@@ -128,7 +124,7 @@ export const createViettelInvoice = async (transactionId: string) => {
 
   try {
     // 3. Call Viettel API via Proxy
-    const endpoint = `${getBaseUrl(config)}/InvoiceWS/createInvoice/${config.tax_code}`;
+    const endpoint = `${getBaseUrl(config)}/InvoiceAPI/InvoiceWS/createInvoice/${config.tax_code}`;
     
     const response = await axios.post('/api/viettel-proxy', {
       endpoint,
