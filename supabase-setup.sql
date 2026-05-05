@@ -231,7 +231,7 @@ CREATE POLICY "Sales can create transactions" ON public.transactions FOR INSERT 
 DROP POLICY IF EXISTS "System config viewable by everyone" ON public.system_config;
 DROP POLICY IF EXISTS "Admins can update system config" ON public.system_config;
 CREATE POLICY "System config viewable by everyone" ON public.system_config FOR SELECT USING (true);
-CREATE POLICY "Admins can update system config" ON public.system_config FOR UPDATE USING (public.is_admin());
+CREATE POLICY "Admins can manage system config" ON public.system_config FOR ALL USING (public.is_admin());
 
 -- Viettel Config Policies
 DROP POLICY IF EXISTS "Viettel config viewable by everyone" ON public.viettel_config;
