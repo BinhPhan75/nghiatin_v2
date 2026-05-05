@@ -239,6 +239,7 @@ const System: React.FC = () => {
           viettel_password: config.viettel_password,
           viettel_tax_code: config.viettel_tax_code,
           viettel_app_id: config.viettel_app_id,
+          viettel_api_url: config.viettel_api_url,
           viettel_is_sandbox: config.viettel_is_sandbox
         })
         .eq('id', config.id);
@@ -760,12 +761,23 @@ const System: React.FC = () => {
                   </div>
                   
                   <div className="input-field">
-                    <label>App ID (Nếu có)</label>
+                    <label>App ID</label>
                     <input 
                       type="text" 
                       value={config.viettel_app_id || ''} 
                       onChange={e => setConfig({...config, viettel_app_id: e.target.value})}
                     />
+                  </div>
+
+                  <div className="input-field">
+                    <label>Địa chỉ API (Endpoint)</label>
+                    <input 
+                      type="text" 
+                      placeholder="VD: https://sinvoice.viettel.vn/s-invoice-web/api"
+                      value={config.viettel_api_url || ''} 
+                      onChange={e => setConfig({...config, viettel_api_url: e.target.value})}
+                    />
+                    <p className="text-[9px] text-neutral-400 mt-1 italic">Địa chỉ URL được Viettel cung cấp để gửi nhận dữ liệu hóa đơn.</p>
                   </div>
 
                   <div className="flex items-center gap-2 py-2">

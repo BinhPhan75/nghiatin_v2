@@ -75,5 +75,6 @@ export interface SystemConfig {
   viettel_password?: string;
   viettel_tax_code?: string;
   viettel_app_id?: string;
+  viettel_api_url?: string;
   viettel_is_sandbox?: boolean;
 }

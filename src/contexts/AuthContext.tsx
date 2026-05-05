@@ -129,14 +129,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const role = profile?.role?.toUpperCase();
   const isAdminEmail = user?.email?.toLowerCase() === 'binhphan.070582@gmail.com';
+  const calculatedIsAdmin = role === 'ADMIN' || isAdminEmail;
 
   const value = {
     user,
     profile,
     loading,
-    isAdmin: role === 'ADMIN' || isAdminEmail,
+    isAdmin: calculatedIsAdmin,
     isAccountant: role === 'ACCOUNTANT',
-    isSales: role === 'SALES' || (!role && !isAdminEmail),
+    isSales: (role === 'SALES' || (!role && !isAdminEmail)) && !calculatedIsAdmin,
     isConfigured: isSupabaseConfigured,
     isApproved: profile?.status === 'APPROVED' || isAdminEmail,
     signOut,

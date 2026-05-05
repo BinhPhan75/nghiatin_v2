@@ -9,6 +9,7 @@ interface ViettelConfig {
   viettel_username?: string;
   viettel_password?: string;
   viettel_tax_code?: string;
+  viettel_api_url?: string;
   viettel_is_sandbox?: boolean;
 }
 
@@ -18,8 +19,11 @@ const getViettelConfig = async (): Promise<ViettelConfig | null> => {
   return data;
 };
 
-const getBaseUrl = (isSandbox: boolean) => {
-  return isSandbox 
+const getBaseUrl = (config: ViettelConfig) => {
+  if (config.viettel_api_url) {
+    return config.viettel_api_url.replace(/\/$/, '');
+  }
+  return config.viettel_is_sandbox 
     ? 'https://sinvoice.viettel.vn/InvoiceAPI/InvoiceWS' // Sandbox/Trial
     : 'https://sinvoice.viettel.vn/InvoiceAPI/InvoiceWS'; // Production
 };
@@ -28,7 +32,7 @@ const getBaseUrl = (isSandbox: boolean) => {
  * Login to get Session/Token (if required by the specific API version)
  */
 export const loginViettel = async (config: ViettelConfig) => {
-  const url = `${getBaseUrl(!!config.viettel_is_sandbox)}/login`;
+  const url = `${getBaseUrl(config)}/login`;
   try {
     const response = await axios.post(url, {
       username: config.viettel_username,
@@ -106,7 +110,7 @@ export const createViettelInvoice = async (transactionId: string) => {
   try {
     // 3. Call Viettel API
     // This typically requires Authorization header with credentials or Token
-    const url = `${getBaseUrl(!!config.viettel_is_sandbox)}/createInvoice/${config.viettel_tax_code}`;
+    const url = `${getBaseUrl(config)}/createInvoice/${config.viettel_tax_code}`;
     
     // Using basic auth or custom auth header as per Viettel requirement
     const response = await axios.post(url, payload, {
