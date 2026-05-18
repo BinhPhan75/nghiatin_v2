@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   reservation_code TEXT, -- Mã tra cứu hóa đơn
   
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  created_by UUID REFERENCES auth.users(id)
+  created_by UUID REFERENCES public.profiles(id)
 );
 
 -- ==========================================

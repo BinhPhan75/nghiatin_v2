@@ -91,10 +91,7 @@ const Reports: React.FC = () => {
     try {
       let query = supabase
         .from('transactions')
-        .select(`
-          *,
-          salesperson:profiles(*)
-        `)
+        .select('*')
         .gte('created_at', `${startDate}T00:00:00`)
         .lte('created_at', `${endDate}T23:59:59`)
         .order('created_at', { ascending: false });
@@ -112,6 +109,23 @@ const Reports: React.FC = () => {
       if (error) throw error;
       
       const rawData = data || [];
+
+      // Fetch profiles for all unique created_by IDs to manually "join"
+      const createdByShortList = [...new Set(rawData.map(t => t.created_by))].filter(Boolean);
+      let profilesMap: Record<string, Profile> = {};
+
+      if (createdByShortList.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', createdByShortList);
+        
+        if (profilesData) {
+          profilesData.forEach(p => {
+            profilesMap[p.id] = p;
+          });
+        }
+      }
       
       // Grouping logic: Transactions with the same customer within 1 minute of each other
       const grouped: GroupedTransaction[] = [];
@@ -125,6 +139,8 @@ const Reports: React.FC = () => {
           Math.abs(new Date(g.created_at).getTime() - tDate.getTime()) < 60000 // 1 minute
         );
         
+        const salesperson = profilesMap[t.created_by];
+
         if (existingGroup) {
           existingGroup.items.push(t);
           existingGroup.total_amount += t.total_amount;
@@ -137,6 +153,7 @@ const Reports: React.FC = () => {
         } else {
           grouped.push({
             ...t,
+            salesperson,
             items: [t]
           });
         }
