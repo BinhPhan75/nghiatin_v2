@@ -107,7 +107,12 @@ const System: React.FC = () => {
       const { data: sysData, error: sysError } = await supabase.from('system_config').select('*').limit(1);
       if (sysError) {
         console.error("Lỗi khi tải cấu hình hệ thống:", sysError);
-        setLastError(sysError);
+        setLastError({
+          source: 'system_config',
+          message: sysError.message,
+          details: sysError.details,
+          code: sysError.code
+        });
       }
       
       if (sysData && sysData.length > 0) {
@@ -133,6 +138,15 @@ const System: React.FC = () => {
         
       if (vError) {
         console.error("Lỗi khi tải cấu hình Viettel:", vError);
+        // Don't overwrite sysError if it already exists, but log it
+        if (!sysError) {
+          setLastError({
+            source: 'viettel_config',
+            message: vError.message,
+            details: vError.details,
+            code: vError.code
+          });
+        }
       }
       
       if (!vError && vDataList && vDataList.length > 0) {
@@ -150,18 +164,34 @@ const System: React.FC = () => {
       } else {
         console.log("[System] No Viettel config found in viettel_config table");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching configs:", error);
+      setLastError({
+        source: 'fetchConfigs_catch',
+        message: error.message || 'Lỗi không xác định khi tải cấu hình',
+        stack: error.stack
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const fetchProfiles = async () => {
-    const { data: snapshot } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    if (snapshot) {
-      setProfiles(snapshot);
-      console.log("Fetched profiles count:", snapshot.length);
+    try {
+      const { data: snapshot, error: profError } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+      if (profError) throw profError;
+      if (snapshot) {
+        setProfiles(snapshot);
+        console.log("Fetched profiles count:", snapshot.length);
+      }
+    } catch (error: any) {
+      console.error("Error fetching profiles:", error);
+      setLastError({
+        source: 'profiles',
+        message: error.message,
+        details: error.details,
+        code: error.code
+      });
     }
   };
 
@@ -482,25 +512,27 @@ const System: React.FC = () => {
       </div>
 
       {lastError && (
-        <div className="bg-red-900/90 text-white p-6 rounded-sm text-xs font-mono mb-6 flex justify-between items-start backdrop-blur-sm border-l-4 border-red-500 shadow-xl">
+        <div className="bg-red-900/90 text-white p-6 rounded-sm text-xs font-mono mb-6 flex justify-between items-start backdrop-blur-sm border-l-4 border-red-500 shadow-xl overflow-hidden">
           <div className="overflow-x-auto w-full">
             <p className="font-bold mb-3 text-sm flex items-center gap-2">
-              <XCircle size={16} /> CẢNH BÁO LỖI HỆ THỐNG (SUPABASE ERROR):
+              <XCircle size={16} /> CẢNH BÁO LỖI HỆ THỐNG:
             </p>
             <div className="bg-black/30 p-4 rounded mb-4 border border-white/10">
-              <pre className="whitespace-pre-wrap">{JSON.stringify(lastError, null, 2)}</pre>
+              <p className="text-gold-primary font-bold mb-1 uppercase text-[9px] tracking-widest">Nguồn lỗi: {lastError.source || 'Không xác định'}</p>
+              <p className="text-paper mb-2">{lastError.message || 'Lỗi không xác định'}</p>
+              {lastError.details && <p className="text-neutral-400 mb-1">Chi tiết: {lastError.details}</p>}
+              {lastError.code && <p className="text-neutral-500">Mã: {lastError.code}</p>}
             </div>
             <div className="bg-white/10 p-4 rounded text-red-100">
               <p className="font-bold mb-2 uppercase text-[10px] tracking-widest">Hướng dẫn khắc phục:</p>
               <ul className="list-disc ml-4 space-y-1">
-                <li>Bước 1: Kiểm tra kết nối Internet hoặc cấu hình <strong>supabase</strong>.</li>
-                <li>Bước 2: Xác nhận tài khoản <strong>{currentUserEmail}</strong> đã có profile trong Supabase.</li>
-                <li>Bước 3: Tải lại trang này (F5) và thử lại.</li>
+                <li>Bước 1: Kiểm tra kết nối Internet và đảm bảo VPN đã tắt (nếu có).</li>
+                <li>Bước 2: Xác nhận quyền truy cập của tài khoản <strong>{currentUserEmail}</strong>.</li>
+                <li>Bước 3: Tải lại trang (F5). Nếu lỗi vẫn còn, hãy chụp màn hình gửi kỹ thuật.</li>
               </ul>
-              <p className="mt-4 italic text-[10px]">Tài khoản đang đăng nhập: <span className="font-bold text-white">{currentUserEmail}</span></p>
             </div>
           </div>
-          <button onClick={() => setLastError(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors ml-4 focus:outline-none">
+          <button onClick={() => setLastError(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors ml-4 focus:outline-none shrink-0 outline-none border-none">
             <X size={20} />
           </button>
         </div>
