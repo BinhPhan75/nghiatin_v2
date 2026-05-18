@@ -213,36 +213,60 @@ async function startServer() {
   app.post('/api/viettel/token', async (req, res) => {
     const { username, password, authUrl } = req.body;
     
-    const loginUrl = authUrl || 'https://api-vinvoice.viettel.vn/auth/login';
-
-    console.log(`[Viettel Token] Requesting token from: ${loginUrl} for user: ${username}`);
+    // Default to production JSON login if not provided
+    const primaryUrl = authUrl || 'https://api-vinvoice.viettel.vn/auth/login';
     
-    try {
-      // Step 1: Login to get access_token using JSON body
-      const response = await axios.post(loginUrl, {
-        username,
-        password
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      });
-      
-      console.log(`[Viettel Token Success] Status: ${response.status}`);
-      console.log(`[Viettel Token Response Body]:`, JSON.stringify(response.data));
-      // Return the full response data which includes access_token
-      res.json(response.data);
-    } catch (error: any) {
-      const status = error.response?.status || 500;
-      const errorData = error.response?.data || error.message;
-      console.error(`[Viettel Token Failed] Status: ${status}, Body:`, JSON.stringify(errorData));
-      
-      res.status(status).json({
-        error: 'Viettel Auth Error',
-        details: errorData
-      });
+    // Construct fallback URL if primary doesn't have the standard prefix
+    let urlsToTry = [primaryUrl];
+    if (!primaryUrl.includes('/services/einvoiceapplication/api/')) {
+        const domain = new URL(primaryUrl).origin;
+        urlsToTry.push(`${domain}/services/einvoiceapplication/api/auth/login`);
     }
+
+    let lastResponse: any = null;
+
+    for (const url of urlsToTry) {
+        console.log(`[Viettel Token] Attempting: ${url}`);
+        try {
+            const response = await axios.post(url, {
+                username,
+                password
+            }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                timeout: 30000,
+                validateStatus: () => true
+            });
+            
+            console.log(`[Viettel Token] URL: ${url}, Status: ${response.status}`);
+            lastResponse = response;
+
+            if (response.status >= 200 && response.status < 300) {
+                console.log(`[Viettel Token Success] Access Token obtained`);
+                return res.json(response.data);
+            }
+            
+            // If it's a 404, we continue to fallback if available
+            if (response.status !== 404) {
+                // If it's an auth error (401, 403), we stop and return it
+                break;
+            }
+        } catch (error: any) {
+            console.error(`[Viettel Token Exception] URL: ${url}, Error: ${error.message}`);
+        }
+    }
+
+    if (lastResponse) {
+        return res.status(lastResponse.status).json({
+            error: 'Viettel Auth Error',
+            status: lastResponse.status,
+            details: lastResponse.data
+        });
+    }
+
+    res.status(500).json({ error: 'Viettel Auth Error', message: 'All login endpoints failed or timed out' });
   });
 
   // Dedicated Viettel Create Invoice Route updated for v2.49 (Basic auth)
@@ -255,28 +279,35 @@ async function startServer() {
 
     console.log(`[Viettel Invoice] Creating invoice at: ${invoiceUrl}`);
     console.log(`[Viettel Invoice Header]: Authorization: Basic ${token ? token.substring(0, 10) + '...' : 'MISSING'}`);
-    console.log(`[Viettel Invoice Payload]:`, JSON.stringify(payload));
     
     try {
       const response = await axios.post(invoiceUrl, payload, {
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'Authorization': `Basic ${token}`
         },
-        timeout: 60000
+        timeout: 60000,
+        validateStatus: () => true
       });
       
-      console.log(`[Viettel Invoice Success] Status: ${response.status}`);
+      console.log(`[Viettel Invoice] URL: ${invoiceUrl}, Status: ${response.status}`);
       console.log(`[Viettel Invoice Response Body]:`, JSON.stringify(response.data));
-      res.json(response.data);
-    } catch (error: any) {
-      const status = error.response?.status || 500;
-      const errorData = error.response?.data || error.message;
-      console.error(`[Viettel Invoice Failed] Status: ${status}, Body:`, JSON.stringify(errorData));
       
-      res.status(status).json({
-        error: 'Viettel Creation Error',
-        details: errorData
+      if (response.status >= 200 && response.status < 300) {
+        res.json(response.data);
+      } else {
+        res.status(response.status).json({
+          error: 'Viettel Creation Error',
+          status: response.status,
+          details: response.data
+        });
+      }
+    } catch (error: any) {
+      console.error(`[Viettel Invoice Exception]:`, error.message);
+      res.status(500).json({
+        error: 'Viettel Server Exception',
+        message: error.message
       });
     }
   });

@@ -446,8 +446,33 @@ const System: React.FC = () => {
       }
     } catch (error: any) {
       console.error("[System] Viettel Connection Test Failed:", error);
-      setLastError(error);
-      alert("❌ Lỗi kết nối Viettel:\n" + (error.message || "Kết nối mạng hoặc thông tin đăng nhập không hợp lệ"));
+      
+      // Extract clean message
+      let message = error.message;
+      let details = null;
+      
+      // If it looks like JSON string from our service
+      if (message.includes('Lỗi xác thực Viettel: {')) {
+        try {
+          const jsonStr = message.split('Lỗi xác thực Viettel: ')[1];
+          const jsonObj = JSON.parse(jsonStr);
+          details = jsonObj;
+          if (jsonObj.status === 404 || jsonObj.code === '404') {
+            message = "Lỗi 404: Không tìm thấy trang. Có thể Auth URL sai. Hãy thử thêm '/services/einvoiceapplication/api' vào trước '/auth/login'.";
+          }
+        } catch (e) {
+          // fallback to original
+        }
+      }
+
+      setLastError({
+        source: 'Viettel_Auth_Test',
+        message: message,
+        details: details || error.details,
+        code: error.code || (details ? details.code : null)
+      });
+      
+      alert("❌ Lỗi kết nối Viettel:\n" + message);
     } finally {
       setTestingViettel(false);
     }
@@ -527,8 +552,15 @@ const System: React.FC = () => {
             <div className="bg-black/30 p-4 rounded mb-4 border border-white/10">
               <p className="text-gold-primary font-bold mb-1 uppercase text-[9px] tracking-widest">Nguồn lỗi: {lastError.source || 'Không xác định'}</p>
               <p className="text-paper mb-2">{lastError.message || 'Lỗi không xác định'}</p>
-              {lastError.details && <p className="text-neutral-400 mb-1">Chi tiết: {lastError.details}</p>}
-              {lastError.code && <p className="text-neutral-500">Mã: {lastError.code}</p>}
+              {lastError.details && (
+                <div className="mt-2 p-2 bg-black/40 rounded border border-white/5 overflow-x-auto">
+                   <p className="text-[10px] text-neutral-400 mb-1 uppercase">Dữ liệu phản hồi:</p>
+                   <pre className="text-[10px] text-gold-primary/80 whitespace-pre-wrap">
+                     {typeof lastError.details === 'object' ? JSON.stringify(lastError.details, null, 2) : lastError.details}
+                   </pre>
+                </div>
+              )}
+              {lastError.code && <p className="text-neutral-500 mt-2">Mã lỗi hệ thống: {lastError.code}</p>}
             </div>
             <div className="bg-white/10 p-4 rounded text-red-100">
               <p className="font-bold mb-2 uppercase text-[10px] tracking-widest">Hướng dẫn khắc phục:</p>
@@ -950,7 +982,7 @@ const System: React.FC = () => {
                     onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelAuthUrl: e.target.value})}
                     placeholder="https://api-vinvoice.viettel.vn/auth/login"
                   />
-                  <p className="text-[9px] text-neutral-400 mt-1 italic">Mặc định: /auth/login</p>
+                  <p className="text-[9px] text-neutral-400 mt-1 italic">Thử: <b>https://api-vinvoice.viettel.vn/auth/login</b> hoặc <b>https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/auth/login</b></p>
                 </div>
 
                 <div className="input-field">
@@ -962,7 +994,7 @@ const System: React.FC = () => {
                     onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelServiceUrl: e.target.value})}
                     placeholder="https://api-vinvoice.viettel.vn/services/einvoiceapplication/api"
                   />
-                  <p className="text-[9px] text-neutral-400 mt-1 italic">Mặc định: /services/einvoiceapplication/api</p>
+                  <p className="text-[9px] text-neutral-400 mt-1 italic text-blue-400">Thử: <b>https://api-vinvoice.viettel.vn/services/einvoiceapplication/api</b></p>
                 </div>
                 
                 <div className="input-field">
