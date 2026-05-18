@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase';
 import { Transaction } from '../types';
 
 export interface ViettelConfig {
-  viettelApiUrl: string;
+  viettelAuthUrl: string;
+  viettelServiceUrl: string;
   viettelUsername: string;
   viettelPassword?: string;
   viettelSupplierTaxCode: string;
@@ -34,48 +35,19 @@ export async function getViettelConfig(): Promise<ViettelConfig | null> {
 }
 
 /**
- * 2.1 Get Access Token using OAuth2 password grant
+ * 2.1 Get Access Token using Viettel v2.49 login (JSON)
  */
 export async function getViettelAccessToken(config: ViettelConfig): Promise<string> {
-  if (!config.viettelApiUrl || !config.viettelApiUrl.startsWith('http')) {
-    throw new Error('URL API Viettel không hợp lệ. Vui lòng kiểm tra cấu hình.');
-  }
-
-  let baseUrl = config.viettelApiUrl.trim().replace(/\/$/, '');
-  const urlParts = baseUrl.split('/');
+  const authUrl = config.viettelAuthUrl || 'https://api-vinvoice.viettel.vn/auth/login';
   
-  // High-precision derivation of OAuth URL for Viettel SInvoice
-  let oauthUrls = [];
-  
-  // 1. If it contains 'InvoiceAPI', try parallel levels
-  if (baseUrl.includes('InvoiceAPI')) {
-    const apiIndex = urlParts.indexOf('InvoiceAPI');
-    if (apiIndex > 0) {
-      oauthUrls.push(urlParts.slice(0, apiIndex).join('/') + '/auth/oauth/token');
-    }
-    // Standard structure: .../api/InvoiceAPI/InvoiceWS -> .../api/auth/oauth/token
-    oauthUrls.push(urlParts.slice(0, -2).join('/') + '/auth/oauth/token');
-  }
-  
-  // 2. Generic fallback: https://domain/auth/oauth/token
-  oauthUrls.push(`${urlParts[0]}//${urlParts[2]}/auth/oauth/token`);
-  
-  // 3. Another variant: https://domain/services/einvoiceapplication/api/auth/oauth/token
-  if (baseUrl.includes('services/einvoiceapplication')) {
-     const svcIndex = baseUrl.indexOf('services/einvoiceapplication');
-     const rootPart = baseUrl.substring(0, svcIndex + 'services/einvoiceapplication/api'.length);
-     oauthUrls.push(rootPart + '/auth/oauth/token');
-  }
-
-  // 4. Use dedicated server-side token endpoint for robust authentication
+  // Use dedicated server-side token endpoint for robust authentication
   try {
-    const cleanBaseUrl = config.viettelApiUrl.trim().replace(/\/+$/, '');
-    console.log(`[Service] Requesting token via server-side endpoint for ${cleanBaseUrl}`);
+    console.log(`[Service] Requesting token via server-side endpoint for ${authUrl}`);
     
     const response = await axios.post('/api/viettel/token', {
       username: config.viettelUsername,
       password: config.viettelPassword,
-      baseUrl: cleanBaseUrl
+      authUrl: authUrl
     });
 
     if (response.data && response.data.access_token) {
@@ -150,11 +122,11 @@ export async function createInvoice(
       }
     };
 
-    const cleanBaseUrl = config.viettelApiUrl.trim().replace(/\/+$/, '');
-    console.log(`[Service] Creating invoice at: ${cleanBaseUrl} with taxCode ${config.viettelSupplierTaxCode}`);
+    const serviceUrl = config.viettelServiceUrl || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api';
+    console.log(`[Service] Creating invoice via server proxy at serviceUrl: ${serviceUrl}`);
 
     const response = await axios.post('/api/viettel/create-invoice', {
-      baseUrl: cleanBaseUrl,
+      serviceUrl: serviceUrl,
       taxCode: config.viettelSupplierTaxCode,
       token: token,
       payload: payload

@@ -43,7 +43,8 @@ const System: React.FC = () => {
     loading: false, connected: false, message: 'Chưa thực hiện kiểm tra' 
   });
   const [viettelEinvoiceConfig, setViettelEinvoiceConfig] = useState<any>({
-    viettelApiUrl: 'https://api-vinvoice.viettel.vn',
+    viettelAuthUrl: 'https://api-vinvoice.viettel.vn/auth/login',
+    viettelServiceUrl: 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api',
     viettelUsername: '',
     viettelPassword: '',
     viettelSupplierTaxCode: '',
@@ -152,8 +153,13 @@ const System: React.FC = () => {
       if (!vError && vDataList && vDataList.length > 0) {
         const vData = vDataList[0];
         console.log("[System] Viettel config loaded:", vData.id, "at", vData.updated_at);
+        
+        // Extract from json field if exists for more flexibility, else from columns
+        const jsonCfg = vData.viettel_einvoice_config || {};
+        
         setViettelEinvoiceConfig({
-          viettelApiUrl: vData.api_url || 'https://api-vinvoice.viettel.vn',
+          viettelAuthUrl: vData.auth_url || jsonCfg.viettelAuthUrl || 'https://api-vinvoice.viettel.vn/auth/login',
+          viettelServiceUrl: vData.api_url || jsonCfg.viettelServiceUrl || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api',
           viettelUsername: vData.username || vData.app_id || '',
           viettelPassword: vData.password || '',
           viettelSupplierTaxCode: vData.tax_code || '',
@@ -377,7 +383,8 @@ const System: React.FC = () => {
         app_id: viettelEinvoiceConfig.viettelUsername, // Map to app_id as well for compatibility
         password: viettelEinvoiceConfig.viettelPassword,
         tax_code: viettelEinvoiceConfig.viettelSupplierTaxCode,
-        api_url: viettelEinvoiceConfig.viettelApiUrl,
+        api_url: viettelEinvoiceConfig.viettelServiceUrl,
+        auth_url: viettelEinvoiceConfig.viettelAuthUrl,
         template_code: viettelEinvoiceConfig.viettelTemplateCode,
         invoice_series: viettelEinvoiceConfig.viettelInvoiceSeries,
         is_sandbox: !viettelEinvoiceConfig.viettelEnabled,
@@ -934,16 +941,28 @@ const System: React.FC = () => {
 
             <form onSubmit={handleUpdateViettelEinvoiceConfig} className="bg-neutral-50 p-8 border border-neutral-100 rounded-sm space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="input-field md:col-span-2">
-                  <label className="text-ink font-black uppercase text-[10px] tracking-widest mb-2 block">Base URL Viettel</label>
+                <div className="input-field">
+                  <label className="text-ink font-black uppercase text-[10px] tracking-widest mb-2 block text-gold-primary">Auth URL (Login)</label>
                   <input 
                     type="text" 
-                    className="w-full p-3 border border-neutral-200 bg-white focus:border-gold-primary outline-none transition-all"
-                    value={viettelEinvoiceConfig.viettelApiUrl}
-                    onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelApiUrl: e.target.value})}
-                    placeholder="https://api-vinvoice.viettel.vn"
+                    className="w-full p-3 border border-neutral-200 bg-white focus:border-gold-primary outline-none transition-all font-mono text-xs"
+                    value={viettelEinvoiceConfig.viettelAuthUrl}
+                    onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelAuthUrl: e.target.value})}
+                    placeholder="https://api-vinvoice.viettel.vn/auth/login"
                   />
-                  <p className="text-[9px] text-neutral-400 mt-1 italic font-bold">Chỉ nhập domain gốc, không kèm /services/... hay /oauth/... (Mặc định: https://api-vinvoice.viettel.vn)</p>
+                  <p className="text-[9px] text-neutral-400 mt-1 italic">Mặc định: /auth/login</p>
+                </div>
+
+                <div className="input-field">
+                  <label className="text-ink font-black uppercase text-[10px] tracking-widest mb-2 block text-blue-600">Service URL (API)</label>
+                  <input 
+                    type="text" 
+                    className="w-full p-3 border border-neutral-200 bg-white focus:border-blue-500 outline-none transition-all font-mono text-xs"
+                    value={viettelEinvoiceConfig.viettelServiceUrl}
+                    onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelServiceUrl: e.target.value})}
+                    placeholder="https://api-vinvoice.viettel.vn/services/einvoiceapplication/api"
+                  />
+                  <p className="text-[9px] text-neutral-400 mt-1 italic">Mặc định: /services/einvoiceapplication/api</p>
                 </div>
                 
                 <div className="input-field">

@@ -211,12 +211,11 @@ async function startServer() {
 
   // Dedicated Viettel Token Route updated for v2.49 (JSON login)
   app.post('/api/viettel/token', async (req, res) => {
-    const { username, password, baseUrl } = req.body;
+    const { username, password, authUrl } = req.body;
     
-    const cleanBaseUrl = baseUrl ? baseUrl.replace(/\/+$/, '') : 'https://api-vinvoice.viettel.vn';
-    const loginUrl = `${cleanBaseUrl}/auth/login`;
+    const loginUrl = authUrl || 'https://api-vinvoice.viettel.vn/auth/login';
 
-    console.log(`[Viettel Token] Requesting token from: ${loginUrl}`);
+    console.log(`[Viettel Token] Requesting token from: ${loginUrl} for user: ${username}`);
     
     try {
       // Step 1: Login to get access_token using JSON body
@@ -231,6 +230,7 @@ async function startServer() {
       });
       
       console.log(`[Viettel Token Success] Status: ${response.status}`);
+      console.log(`[Viettel Token Response Body]:`, JSON.stringify(response.data));
       // Return the full response data which includes access_token
       res.json(response.data);
     } catch (error: any) {
@@ -245,25 +245,29 @@ async function startServer() {
     }
   });
 
-  // Dedicated Viettel Create Invoice Route updated for v2.49 (Cookie auth)
+  // Dedicated Viettel Create Invoice Route updated for v2.49 (Basic auth)
   app.post('/api/viettel/create-invoice', async (req, res) => {
-    const { baseUrl, taxCode, token, payload } = req.body;
+    const { serviceUrl, taxCode, token, payload } = req.body;
     
-    const cleanBaseUrl = baseUrl ? baseUrl.replace(/\/+$/, '') : 'https://api-vinvoice.viettel.vn';
-    const invoiceUrl = `${cleanBaseUrl}/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS/createInvoice/${taxCode}`;
+    // Construct endpoint: {serviceUrl}/InvoiceAPI/InvoiceWS/createInvoice/{taxCode}
+    const cleanServiceUrl = serviceUrl ? serviceUrl.replace(/\/+$/, '') : 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api';
+    const invoiceUrl = `${cleanServiceUrl}/InvoiceAPI/InvoiceWS/createInvoice/${taxCode}`;
 
     console.log(`[Viettel Invoice] Creating invoice at: ${invoiceUrl}`);
+    console.log(`[Viettel Invoice Header]: Authorization: Basic ${token ? token.substring(0, 10) + '...' : 'MISSING'}`);
+    console.log(`[Viettel Invoice Payload]:`, JSON.stringify(payload));
     
     try {
       const response = await axios.post(invoiceUrl, payload, {
         headers: {
           'Content-Type': 'application/json',
-          'Cookie': `access_token=${token}`
+          'Authorization': `Basic ${token}`
         },
         timeout: 60000
       });
       
       console.log(`[Viettel Invoice Success] Status: ${response.status}`);
+      console.log(`[Viettel Invoice Response Body]:`, JSON.stringify(response.data));
       res.json(response.data);
     } catch (error: any) {
       const status = error.response?.status || 500;
