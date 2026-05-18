@@ -58,11 +58,16 @@ const System: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    setLastError(null);
+    // Initial fetch for data that doesn't change often
     fetchProducts();
     fetchConfigs();
     fetchBanks();
-    if (isAdmin || activeTab === 'users') fetchProfiles();
+  }, []); // Run only once
+
+  useEffect(() => {
+    // Tab-specific fetching
+    setLastError(null);
+    if (activeTab === 'users' && isAdmin) fetchProfiles();
     if (activeTab === 'diagnostics') checkConnection();
   }, [activeTab, isAdmin]);
 
@@ -114,8 +119,9 @@ const System: React.FC = () => {
       }
 
       // 2. Fetch Viettel dedicated config
-      const { data: vData, error: vError } = await supabase.from('viettel_config').select('*').limit(1).single();
-      if (!vError && vData) {
+      const { data: vDataList, error: vError } = await supabase.from('viettel_config').select('*').limit(1);
+      if (!vError && vDataList && vDataList.length > 0) {
+        const vData = vDataList[0];
         setViettelEinvoiceConfig({
           viettelApiUrl: vData.api_url || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS',
           viettelUsername: vData.username || '',
@@ -123,7 +129,7 @@ const System: React.FC = () => {
           viettelSupplierTaxCode: vData.tax_code || '',
           viettelTemplateCode: vData.template_code || '',
           viettelInvoiceSeries: vData.invoice_series || '',
-          viettelEnabled: vData.is_sandbox === false || vData.is_sandbox === true // just check if exists
+          viettelEnabled: vData.is_sandbox === false
         });
       }
     } catch (error) {
@@ -309,8 +315,10 @@ const System: React.FC = () => {
     setSuccessMsg(null);
 
     try {
-      // Upsert to dedicated viettel_config table
-      const { error } = await supabase
+      console.log("[System] Saving Viettel config...");
+      
+      // 1. Upsert to dedicated viettel_config table
+      const { error: error1 } = await supabase
         .from('viettel_config')
         .upsert({
           id: '00000000-0000-0000-0000-000000000000',
@@ -320,27 +328,32 @@ const System: React.FC = () => {
           api_url: viettelEinvoiceConfig.viettelApiUrl,
           template_code: viettelEinvoiceConfig.viettelTemplateCode,
           invoice_series: viettelEinvoiceConfig.viettelInvoiceSeries,
-          is_sandbox: !viettelEinvoiceConfig.viettelEnabled, // Use enabled flag to toggle sandbox if needed, though sandbox logic can vary
+          is_sandbox: !viettelEinvoiceConfig.viettelEnabled,
           updated_at: new Date().toISOString()
         });
 
-      if (error) throw error;
+      if (error1) throw error1;
       
-      // Also sync to system_config just in case
+      // 2. Also sync to system_config for backward compatibility
       if (config) {
         const configId = config?.id || '00000000-0000-0000-0000-000000000000';
-        await supabase.from('system_config').upsert({
+        const { error: error2 } = await supabase.from('system_config').upsert({
            id: configId,
            viettel_einvoice_config: viettelEinvoiceConfig,
            updated_at: new Date().toISOString()
         });
+        if (error2) console.warn("[System] Failed to sync to system_config:", error2);
       }
 
       setSuccessMsg("Đã cập nhật cấu hình hóa đơn điện tử Viettel thành công!");
-      setTimeout(() => setSuccessMsg(null), 3000);
-      fetchConfigs();
+      
+      // Refetch to ensure state is in sync
+      await fetchConfigs();
+      
+      setTimeout(() => setSuccessMsg(null), 5000);
     } catch (error: any) {
-      alert("Lỗi khi lưu cấu hình: " + error.message);
+      console.error("[System] Save Viettel Config Error:", error);
+      alert("Lỗi khi lưu cấu hình: " + (error.message || "Không xác định"));
     } finally {
       setSavingViettel(false);
     }

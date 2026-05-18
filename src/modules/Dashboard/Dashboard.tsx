@@ -13,6 +13,7 @@ import { motion } from 'motion/react';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     buyTotal: 0,
     sellTotal: 0,
@@ -26,8 +27,15 @@ const Dashboard: React.FC = () => {
   const [sjcPrices, setSjcPrices] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchSJCPrices();
+    const init = async () => {
+      setLoading(true);
+      await Promise.all([
+        fetchDashboardData(),
+        fetchSJCPrices()
+      ]);
+      setLoading(false);
+    };
+    init();
   }, []);
 
   const fetchSJCPrices = async () => {
@@ -111,6 +119,15 @@ const Dashboard: React.FC = () => {
   };
 
   const COLORS = ['#D4AF37', '#141414', '#996515', '#006738', '#4b5563'];
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <div className="w-12 h-12 border-4 border-gold-primary border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-xs font-black uppercase tracking-widest text-neutral-400 italic">Đang tải dữ liệu cơ sở dữ liệu...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-8">
