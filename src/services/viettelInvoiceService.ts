@@ -37,41 +37,70 @@ export async function getViettelConfig(): Promise<ViettelConfig | null> {
  * 2.1 Get Access Token using OAuth2 password grant
  */
 export async function getViettelAccessToken(config: ViettelConfig): Promise<string> {
-  // Requirement: {viettelApiUrl}/../../auth/oauth/token
-  // Usually viettelApiUrl is like .../InvoiceAPI/InvoiceWS
-  // We need to navigate up to auth/oauth/token
-  
+  if (!config.viettelApiUrl || !config.viettelApiUrl.startsWith('http')) {
+    throw new Error('URL API Viettel không hợp lệ. Vui lòng kiểm tra cấu hình.');
+  }
+
   let baseUrl = config.viettelApiUrl.trim().replace(/\/$/, '');
   const urlParts = baseUrl.split('/');
-  // Remove last two segments (InvoiceAPI/InvoiceWS) to get to service root
-  const oauthUrl = urlParts.slice(0, -2).join('/') + '/auth/oauth/token';
-
-  try {
-    const params = new URLSearchParams();
-    params.append('username', config.viettelUsername);
-    params.append('password', config.viettelPassword || '');
-    params.append('grant_type', 'password');
-
-    // Call via proxy
-    const response = await axios.post('/api/viettel-proxy', {
-      endpoint: oauthUrl,
-      method: 'POST',
-      payload: params.toString(),
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json'
-      }
-    });
-
-    if (response.data && response.data.access_token) {
-      return response.data.access_token;
+  
+  // High-precision derivation of OAuth URL for Viettel SInvoice
+  let oauthUrls = [];
+  
+  // 1. If it contains 'InvoiceAPI', try parallel levels
+  if (baseUrl.includes('InvoiceAPI')) {
+    const apiIndex = urlParts.indexOf('InvoiceAPI');
+    if (apiIndex > 0) {
+      oauthUrls.push(urlParts.slice(0, apiIndex).join('/') + '/auth/oauth/token');
     }
-    
-    throw new Error(response.data.error_description || 'Không lấy được access token');
-  } catch (error: any) {
-    console.error('getViettelAccessToken Error:', error.response?.data || error.message);
-    throw new Error('Lỗi xác thực Viettel: ' + (error.response?.data?.details || error.message));
+    // Standard structure: .../api/InvoiceAPI/InvoiceWS -> .../api/auth/oauth/token
+    oauthUrls.push(urlParts.slice(0, -2).join('/') + '/auth/oauth/token');
   }
+  
+  // 2. Generic fallback: https://domain/auth/oauth/token
+  oauthUrls.push(`${urlParts[0]}//${urlParts[2]}/auth/oauth/token`);
+  
+  // 3. Another variant: https://domain/services/einvoiceapplication/api/auth/oauth/token
+  if (baseUrl.includes('services/einvoiceapplication')) {
+     const svcIndex = baseUrl.indexOf('services/einvoiceapplication');
+     const rootPart = baseUrl.substring(0, svcIndex + 'services/einvoiceapplication/api'.length);
+     oauthUrls.push(rootPart + '/auth/oauth/token');
+  }
+
+  // Remove duplicates
+  oauthUrls = Array.from(new Set(oauthUrls));
+
+  let lastErr = null;
+  for (const oauthUrl of oauthUrls) {
+    try {
+      const params = new URLSearchParams();
+      params.append('username', config.viettelUsername);
+      params.append('password', config.viettelPassword || '');
+      params.append('grant_type', 'password');
+
+      console.log(`[Service] Attempting Token from: ${oauthUrl}`);
+
+      const response = await axios.post('/api/viettel-proxy', {
+        endpoint: oauthUrl,
+        method: 'POST',
+        payload: params.toString(),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json'
+        }
+      });
+
+      if (response.data && response.data.access_token) {
+        return response.data.access_token;
+      }
+    } catch (error: any) {
+      console.warn(`[Service] Failed token attempt at ${oauthUrl}:`, error.response?.data?.error || error.message);
+      lastErr = error;
+    }
+  }
+
+  const details = lastErr?.response?.data?.error_description || lastErr?.message || '';
+  throw new Error('Lỗi xác thực Viettel: ' + details);
 }
 
 /**
@@ -112,7 +141,7 @@ export async function createInvoice(
         {
           itemCode: transaction.product_id || "GOLD",
           itemName: transaction.product_name,
-          unitName: "Món",
+          unitName: transaction.unit || "Món",
           unitPrice: transaction.price_per_unit,
           quantity: transaction.quantity,
           itemTotalAmountWithoutTax: transaction.total_amount,
@@ -133,7 +162,15 @@ export async function createInvoice(
       }
     };
 
-    const endpoint = `${config.viettelApiUrl.trim().replace(/\/$/, '')}/createInvoice/${config.viettelSupplierTaxCode}`;
+    // Clean up endpoint: remove InvoiceWS if present
+    let apiRoot = config.viettelApiUrl.trim().replace(/\/$/, '');
+    if (apiRoot.endsWith('InvoiceWS')) {
+      apiRoot = apiRoot.replace(/\/InvoiceWS$/, '');
+    }
+
+    const endpoint = `${apiRoot}/createInvoice/${config.viettelSupplierTaxCode}`;
+
+    console.log(`[Service] Creating invoice at: ${endpoint}`);
 
     const response = await axios.post('/api/viettel-proxy', {
       endpoint,
@@ -146,30 +183,30 @@ export async function createInvoice(
       }
     });
 
-    // Handle response
-    // Viettel usually returns result: { errorCode, description, invoiceNo }
     const data = response.data;
-    const isSuccess = data.errorCode === "0" || !data.errorCode;
+    // Viettel result structure can vary; checking common success markers
+    const isSuccess = data.errorCode === "0" || !data.errorCode || data.result === "SUCCESS";
 
-    if (isSuccess && data.invoiceNo) {
+    if (isSuccess && (data.invoiceNo || data.result?.invoiceNo)) {
       return {
         success: true,
-        invoiceNo: data.invoiceNo,
+        invoiceNo: data.invoiceNo || data.result.invoiceNo,
         message: "Xuất hóa đơn thành công"
       };
     } else {
       return {
         success: false,
         invoiceNo: "",
-        message: data.description || "Lỗi không xác định từ Viettel"
+        message: data.description || data.message || "Lỗi từ Viettel"
       };
     }
   } catch (error: any) {
     console.error('createInvoice Error:', error);
+    const details = error.response?.data?.details || error.message;
     return {
       success: false,
       invoiceNo: "",
-      message: error.message || "Lỗi kết nối API Viettel"
+      message: "Lỗi kết nối Viettel: " + details
     };
   }
 }
