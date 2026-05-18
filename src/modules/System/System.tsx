@@ -51,8 +51,11 @@ const System: React.FC = () => {
     viettelInvoiceSeries: '',
     viettelEnabled: false
   });
+  const [savingViettel, setSavingViettel] = useState(false);
+  const [savingBank, setSavingBank] = useState(false);
   const [testingViettel, setTestingViettel] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setLastError(null);
@@ -94,18 +97,12 @@ const System: React.FC = () => {
   const fetchConfigs = async () => {
     setLoading(true);
     try {
-      // 1. Fetch system general config
+      // 1. Fetch system general config (Bank info)
       const { data: sysData, error: sysError } = await supabase.from('system_config').select('*').limit(1);
       if (sysError) console.error("Lỗi khi tải cấu hình hệ thống:", sysError);
       
       if (sysData && sysData.length > 0) {
         setConfig(sysData[0]);
-        if (sysData[0].viettel_einvoice_config) {
-          setViettelEinvoiceConfig({
-            ...viettelEinvoiceConfig,
-            ...sysData[0].viettel_einvoice_config
-          });
-        }
       } else {
         setConfig({
           id: '00000000-0000-0000-0000-000000000000',
@@ -114,6 +111,20 @@ const System: React.FC = () => {
           account_holder: '',
           bank_id: ''
         } as any);
+      }
+
+      // 2. Fetch Viettel dedicated config
+      const { data: vData, error: vError } = await supabase.from('viettel_config').select('*').limit(1).single();
+      if (!vError && vData) {
+        setViettelEinvoiceConfig({
+          viettelApiUrl: vData.api_url || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS',
+          viettelUsername: vData.username || '',
+          viettelPassword: vData.password || '',
+          viettelSupplierTaxCode: vData.tax_code || '',
+          viettelTemplateCode: vData.template_code || '',
+          viettelInvoiceSeries: vData.invoice_series || '',
+          viettelEnabled: vData.is_sandbox === false || vData.is_sandbox === true // just check if exists
+        });
       }
     } catch (error) {
       console.error("Error fetching configs:", error);
@@ -264,6 +275,8 @@ const System: React.FC = () => {
   const handleUpdateConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!config) return;
+    setSavingBank(true);
+    setSuccessMsg(null);
 
     try {
       const configId = config?.id || '00000000-0000-0000-0000-000000000000';
@@ -275,42 +288,61 @@ const System: React.FC = () => {
           account_no: config?.account_no || '',
           account_holder: config?.account_holder || '',
           bank_id: config?.bank_id || '',
-          viettel_einvoice_config: viettelEinvoiceConfig, // PRESERVE THIS
           updated_at: new Date().toISOString()
         });
 
       if (error) throw error;
-      alert("Đã cập nhật cấu hình tài khoản ngân hàng thành công!");
+      setSuccessMsg("Đã cập nhật cấu hình tài khoản ngân hàng thành công!");
+      setTimeout(() => setSuccessMsg(null), 3000);
       fetchConfigs();
     } catch (error: any) {
       alert("Lỗi khi lưu cấu hình: " + error.message);
       console.error("Config Update Error:", error);
+    } finally {
+      setSavingBank(false);
     }
   };
 
   const handleUpdateViettelEinvoiceConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!config) return;
+    setSavingViettel(true);
+    setSuccessMsg(null);
 
     try {
-      const configId = config?.id || '00000000-0000-0000-0000-000000000000';
+      // Upsert to dedicated viettel_config table
       const { error } = await supabase
-        .from('system_config')
+        .from('viettel_config')
         .upsert({
-          id: configId,
-          bank_name: config?.bank_name || '',
-          account_no: config?.account_no || '',
-          account_holder: config?.account_holder || '',
-          bank_id: config?.bank_id || '',
-          viettel_einvoice_config: viettelEinvoiceConfig,
+          id: '00000000-0000-0000-0000-000000000000',
+          username: viettelEinvoiceConfig.viettelUsername,
+          password: viettelEinvoiceConfig.viettelPassword,
+          tax_code: viettelEinvoiceConfig.viettelSupplierTaxCode,
+          api_url: viettelEinvoiceConfig.viettelApiUrl,
+          template_code: viettelEinvoiceConfig.viettelTemplateCode,
+          invoice_series: viettelEinvoiceConfig.viettelInvoiceSeries,
+          is_sandbox: !viettelEinvoiceConfig.viettelEnabled, // Use enabled flag to toggle sandbox if needed, though sandbox logic can vary
           updated_at: new Date().toISOString()
         });
 
       if (error) throw error;
-      alert("Đã cập nhật cấu hình hóa đơn điện tử Viettel thành công!");
+      
+      // Also sync to system_config just in case
+      if (config) {
+        const configId = config?.id || '00000000-0000-0000-0000-000000000000';
+        await supabase.from('system_config').upsert({
+           id: configId,
+           viettel_einvoice_config: viettelEinvoiceConfig,
+           updated_at: new Date().toISOString()
+        });
+      }
+
+      setSuccessMsg("Đã cập nhật cấu hình hóa đơn điện tử Viettel thành công!");
+      setTimeout(() => setSuccessMsg(null), 3000);
       fetchConfigs();
     } catch (error: any) {
       alert("Lỗi khi lưu cấu hình: " + error.message);
+    } finally {
+      setSavingViettel(false);
     }
   };
 
@@ -372,6 +404,12 @@ const System: React.FC = () => {
       <div className="flex justify-between items-end mb-6">
         <div>
           <h1 className="text-4xl text-ink">Hệ Thống</h1>
+          {successMsg && (
+            <div className="mt-2 bg-green-500 text-white px-4 py-2 rounded shadow-lg flex items-center gap-2 animate-bounce">
+              <CheckCircle size={16} />
+              <span className="text-xs font-bold uppercase">{successMsg}</span>
+            </div>
+          )}
           <p className="text-[10px] uppercase font-black text-neutral-400 tracking-widest mt-2 px-1">Cấu hình & Quản trị</p>
         </div>
         <div className="flex bg-paper p-1 border border-neutral-100 rounded-sm shadow-sm overflow-x-auto">
@@ -686,8 +724,13 @@ const System: React.FC = () => {
                   </div>
 
                   {isAdmin ? (
-                    <button type="submit" className="vcb-btn flex items-center justify-center gap-2">
-                      <Save size={18} /> Lưu cấu hình
+                    <button 
+                      type="submit" 
+                      disabled={savingBank}
+                      className="vcb-btn flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      <Save size={18} className={savingBank ? 'animate-pulse' : ''} /> 
+                      {savingBank ? 'Đang lưu...' : 'Lưu cấu hình'}
                     </button>
                   ) : (
                     <div className="bg-neutral-50 p-4 border-l-4 border-neutral-300 italic text-xs text-neutral-600">
@@ -889,9 +932,11 @@ const System: React.FC = () => {
               <div className="flex flex-col md:flex-row gap-4 pt-6 border-t border-neutral-200">
                 <button 
                   type="submit"
-                  className="flex-1 bg-ink text-paper py-4 px-6 font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-gold-primary hover:text-ink transition-all shadow-md group"
+                  disabled={savingViettel}
+                  className="flex-1 bg-ink text-paper py-4 px-6 font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-gold-primary hover:text-ink transition-all shadow-md group disabled:opacity-50"
                 >
-                  <Save size={18} className="group-hover:scale-110 transition-transform" /> Lưu tất cả cấu hình
+                  <Save size={18} className={savingViettel ? 'animate-bounce' : 'group-hover:scale-110 transition-transform'} /> 
+                  {savingViettel ? 'Đang gửi dữ liệu...' : 'Lưu tất cả cấu hình'}
                 </button>
                 <button 
                   type="button"
