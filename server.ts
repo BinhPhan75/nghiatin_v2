@@ -211,13 +211,16 @@ async function startServer() {
 
   // Dedicated Viettel Token Route as requested with fallbacks
   app.post('/api/viettel/token', async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, baseUrl } = req.body;
     
-    // Fallback URLs to try in order
+    const cleanBaseUrl = baseUrl ? baseUrl.replace(/\/+$/, '') : 'https://api-vinvoice.viettel.vn';
+
+    // Fallback URLs to try in order - based on user's new requirement: {baseUrl}/oauth/token
     const urls = [
+      `${cleanBaseUrl}/oauth/token`,
+      'https://api-vinvoice.viettel.vn/oauth/token',
       'https://api-vinvoice.viettel.vn/auth/oauth/token',
-      'https://vinvoice.viettel.vn/auth/oauth/token',
-      'https://api-vinvoice.viettel.vn/oauth/token'
+      'https://vinvoice.viettel.vn/auth/oauth/token'
     ];
     
     const params = new URLSearchParams();

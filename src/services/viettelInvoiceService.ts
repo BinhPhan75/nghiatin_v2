@@ -70,9 +70,11 @@ export async function getViettelAccessToken(config: ViettelConfig): Promise<stri
   // 4. Use dedicated server-side token endpoint for robust authentication
   try {
     console.log(`[Service] Requesting token via server-side endpoint`);
+    const baseUrl = config.viettelApiUrl.trim().replace(/\/+$/, '');
     const response = await axios.post('/api/viettel/token', {
       username: config.viettelUsername,
-      password: config.viettelPassword
+      password: config.viettelPassword,
+      baseUrl: baseUrl
     });
 
     if (response.data && response.data.access_token) {
@@ -146,13 +148,9 @@ export async function createInvoice(
       }
     };
 
-    // Clean up endpoint: remove InvoiceWS if present
-    let apiRoot = config.viettelApiUrl.trim().replace(/\/$/, '');
-    if (apiRoot.endsWith('InvoiceWS')) {
-      apiRoot = apiRoot.replace(/\/InvoiceWS$/, '');
-    }
-
-    const endpoint = `${apiRoot}/createInvoice/${config.viettelSupplierTaxCode}`;
+    // 3. Construct endpoint based on new requirement: {baseUrl}/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS/createInvoice/{taxCode}
+    const cleanBaseUrl = config.viettelApiUrl.trim().replace(/\/+$/, '');
+    const endpoint = `${cleanBaseUrl}/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS/createInvoice/${config.viettelSupplierTaxCode}`;
 
     console.log(`[Service] Creating invoice at: ${endpoint}`);
 

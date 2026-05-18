@@ -889,15 +889,15 @@ const System: React.FC = () => {
             <form onSubmit={handleUpdateViettelEinvoiceConfig} className="bg-neutral-50 p-8 border border-neutral-100 rounded-sm space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="input-field md:col-span-2">
-                  <label className="text-ink font-black uppercase text-[10px] tracking-widest mb-2 block">Địa chỉ API Viettel</label>
+                  <label className="text-ink font-black uppercase text-[10px] tracking-widest mb-2 block">Base URL Viettel</label>
                   <input 
                     type="text" 
                     className="w-full p-3 border border-neutral-200 bg-white focus:border-gold-primary outline-none transition-all"
                     value={viettelEinvoiceConfig.viettelApiUrl}
                     onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelApiUrl: e.target.value})}
-                    placeholder="VD: https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS"
+                    placeholder="https://api-vinvoice.viettel.vn"
                   />
-                  <p className="text-[9px] text-neutral-400 mt-1 italic">Vui lòng nhập đúng URL API được Viettel cung cấp (Thường kết thúc bằng InvoiceWS).</p>
+                  <p className="text-[9px] text-neutral-400 mt-1 italic font-bold">Chỉ nhập domain gốc, không kèm /services/... hay /oauth/... (Mặc định: https://api-vinvoice.viettel.vn)</p>
                 </div>
                 
                 <div className="input-field">
