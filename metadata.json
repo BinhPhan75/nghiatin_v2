@@ -1,7 +1,10 @@
 {
   "name": "NGHIATINGOLD.V2",
-  "description": "Ứng dụng quét thẻ CCCD mặt trước bằng camera điện thoại, sử dụng AI để trích xuất thông tin tự động, không phụ thuộc vào mã QR.",
+  "description": "Hệ thống quản lý mua bán vàng Nghĩa Tín: Tích hợp OCR CCCD, VietQR, và hóa đơn điện tử Viettel.",
   "requestFramePermissions": [
     "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }

@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/BinhPhan75/nghiatingold/main/icon.png" />
     <title>NGHIA TIN GOLD</title>
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        console.log("Global Error: " + message + " at " + source + ":" + lineno);
+        var debugDiv = document.createElement('div');
+        debugDiv.style.position = 'fixed';
+        debugDiv.style.top = '0';
+        debugDiv.style.left = '0';
+        debugDiv.style.background = 'red';
+        debugDiv.style.color = 'white';
+        debugDiv.style.padding = '10px';
+        debugDiv.style.zIndex = '9999';
+        debugDiv.style.fontSize = '10px';
+        debugDiv.innerHTML = 'Client Error: ' + message;
+        document.body.appendChild(debugDiv);
+      };
+    </script>
   </head>
   <body>
     <div id="root"></div>

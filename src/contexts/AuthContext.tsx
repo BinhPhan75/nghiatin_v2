@@ -34,13 +34,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Check current session
+    const authTimeout = setTimeout(() => {
+      console.warn("Auth initialization timed out, forcing loading to false.");
+      setLoading(false);
+    }, 10000); // 10s fallback
+
     supabase.auth.getSession().then(({ data: { session }, error }) => {
+      clearTimeout(authTimeout);
       if (error) {
         console.error("Auth session error:", error.message);
-        if (error.message.includes("Refresh Token Not Found") || error.message.includes("Invalid Refresh Token")) {
-          // Force sign out to clear stale localStorage
-          supabase.auth.signOut();
-        }
         setUser(null);
         setLoading(false);
         return;
@@ -52,35 +54,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setLoading(false);
       }
+    }).catch(err => {
+      console.error("Critical getSession error:", err);
+      clearTimeout(authTimeout);
+      setLoading(false);
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("Auth Event:", event);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(`[AuthContext] Auth Event: ${event}`);
       
       if (session?.user) {
         setUser(session.user);
-        fetchProfile(session.user.id, session.user.email);
+        await fetchProfile(session.user.id, session.user.email);
+        // Only update last seen on event change, not periodically
         updateLastSeen(session.user.id);
-      } else if (event === 'SIGNED_OUT') {
+      } else {
         setUser(null);
         setProfile(null);
         setLoading(false);
       }
     });
 
-    // Periodic heartbeat to update last_seen_at
-    const intervalId = setInterval(() => {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
-          updateLastSeen(session.user.id);
-        }
-      });
-    }, 1000 * 60 * 2); // Every 2 minutes
-
     return () => {
       subscription.unsubscribe();
-      clearInterval(intervalId);
     };
   }, []);
 

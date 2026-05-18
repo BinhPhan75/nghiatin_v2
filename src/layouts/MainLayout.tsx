@@ -29,7 +29,7 @@ const MainLayout: React.FC = () => {
   });
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-ink overflow-hidden text-ink">
+    <div className="flex flex-col md:flex-row min-h-screen bg-ink overflow-hidden text-paper">
       {/* Desktop Sidebar navigation */}
       <nav className="hidden md:flex w-24 border-r border-gold-primary/20 flex-col items-center py-8 gap-8 shrink-0">
         <div className="w-12 h-12 bg-gold-primary flex items-center justify-center rounded-sm mb-4">

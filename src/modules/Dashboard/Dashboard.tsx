@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { supabase } from '../../lib/supabase';
 import { Transaction, Product } from '../../types';
 import { 
@@ -31,15 +32,13 @@ const Dashboard: React.FC = () => {
 
   const fetchSJCPrices = async () => {
     try {
-      const response = await fetch('/api/gold-prices/sjc');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.items) {
-          setSjcPrices(data.items);
-        }
+      const response = await axios.get('/api/gold-prices/sjc');
+      if (response.data && response.data.items) {
+        setSjcPrices(response.data.items);
       }
-    } catch (error) {
-      console.error('Error fetching SJC prices in dashboard:', error);
+    } catch (error: any) {
+      console.error('Error fetching SJC prices in dashboard:', error.message);
+      // If server is not ready, we just show listed prices fallback (handled in rendering)
     }
   };
 

@@ -4,7 +4,7 @@ import http from 'http';
 const options = {
   hostname: '0.0.0.0',
   port: 3000,
-  path: '/api/health',
+  path: '/',
   method: 'GET'
 };
 
