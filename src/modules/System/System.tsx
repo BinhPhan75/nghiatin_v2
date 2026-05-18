@@ -102,13 +102,19 @@ const System: React.FC = () => {
   const fetchConfigs = async () => {
     setLoading(true);
     try {
+      console.log("[System] Fetching configs...");
       // 1. Fetch system general config (Bank info)
       const { data: sysData, error: sysError } = await supabase.from('system_config').select('*').limit(1);
-      if (sysError) console.error("Lỗi khi tải cấu hình hệ thống:", sysError);
+      if (sysError) {
+        console.error("Lỗi khi tải cấu hình hệ thống:", sysError);
+        setLastError(sysError);
+      }
       
       if (sysData && sysData.length > 0) {
+        console.log("[System] System config loaded:", sysData[0].id);
         setConfig(sysData[0]);
       } else {
+        console.log("[System] No system config found, using default");
         setConfig({
           id: '00000000-0000-0000-0000-000000000000',
           bank_name: '',
@@ -120,8 +126,13 @@ const System: React.FC = () => {
 
       // 2. Fetch Viettel dedicated config
       const { data: vDataList, error: vError } = await supabase.from('viettel_config').select('*').limit(1);
+      if (vError) {
+        console.error("Lỗi khi tải cấu hình Viettel:", vError);
+      }
+      
       if (!vError && vDataList && vDataList.length > 0) {
         const vData = vDataList[0];
+        console.log("[System] Viettel config loaded:", vData.id);
         setViettelEinvoiceConfig({
           viettelApiUrl: vData.api_url || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS',
           viettelUsername: vData.username || '',
@@ -131,6 +142,8 @@ const System: React.FC = () => {
           viettelInvoiceSeries: vData.invoice_series || '',
           viettelEnabled: vData.is_sandbox === false
         });
+      } else {
+        console.log("[System] No Viettel config found");
       }
     } catch (error) {
       console.error("Error fetching configs:", error);
@@ -313,36 +326,50 @@ const System: React.FC = () => {
     e.preventDefault();
     setSavingViettel(true);
     setSuccessMsg(null);
+    setLastError(null);
 
     try {
-      console.log("[System] Saving Viettel config...");
+      console.log("[System] Starting save Viettel config process...");
       
       // 1. Upsert to dedicated viettel_config table
+      const viettelPayload = {
+        id: '00000000-0000-0000-0000-000000000000',
+        username: viettelEinvoiceConfig.viettelUsername,
+        password: viettelEinvoiceConfig.viettelPassword,
+        tax_code: viettelEinvoiceConfig.viettelSupplierTaxCode,
+        api_url: viettelEinvoiceConfig.viettelApiUrl,
+        template_code: viettelEinvoiceConfig.viettelTemplateCode,
+        invoice_series: viettelEinvoiceConfig.viettelInvoiceSeries,
+        is_sandbox: !viettelEinvoiceConfig.viettelEnabled,
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log("[System] Upserting to viettel_config table:", viettelPayload.id);
       const { error: error1 } = await supabase
         .from('viettel_config')
-        .upsert({
-          id: '00000000-0000-0000-0000-000000000000',
-          username: viettelEinvoiceConfig.viettelUsername,
-          password: viettelEinvoiceConfig.viettelPassword,
-          tax_code: viettelEinvoiceConfig.viettelSupplierTaxCode,
-          api_url: viettelEinvoiceConfig.viettelApiUrl,
-          template_code: viettelEinvoiceConfig.viettelTemplateCode,
-          invoice_series: viettelEinvoiceConfig.viettelInvoiceSeries,
-          is_sandbox: !viettelEinvoiceConfig.viettelEnabled,
-          updated_at: new Date().toISOString()
-        });
+        .upsert(viettelPayload);
 
-      if (error1) throw error1;
+      if (error1) {
+        console.error("[System] Viettel config upsert error:", error1);
+        throw error1;
+      }
       
+      console.log("[System] Viettel config upsert successful");
+
       // 2. Also sync to system_config for backward compatibility
-      if (config) {
-        const configId = config?.id || '00000000-0000-0000-0000-000000000000';
-        const { error: error2 } = await supabase.from('system_config').upsert({
-           id: configId,
-           viettel_einvoice_config: viettelEinvoiceConfig,
-           updated_at: new Date().toISOString()
-        });
-        if (error2) console.warn("[System] Failed to sync to system_config:", error2);
+      const sysConfigId = config?.id || '00000000-0000-0000-0000-000000000000';
+      console.log("[System] Syncing to system_config table:", sysConfigId);
+      
+      const { error: error2 } = await supabase.from('system_config').upsert({
+         id: sysConfigId,
+         viettel_einvoice_config: viettelEinvoiceConfig,
+         updated_at: new Date().toISOString()
+      });
+      
+      if (error2) {
+        console.log("[System] system_config sync failed (might be expected if table structure differs):", error2);
+      } else {
+        console.log("[System] system_config sync successful");
       }
 
       setSuccessMsg("Đã cập nhật cấu hình hóa đơn điện tử Viettel thành công!");
@@ -352,9 +379,11 @@ const System: React.FC = () => {
       
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (error: any) {
-      console.error("[System] Save Viettel Config Error:", error);
-      alert("Lỗi khi lưu cấu hình: " + (error.message || "Không xác định"));
+      console.error("[System] Total Save Viettel Config Error:", error);
+      setLastError(error);
+      alert("Lỗi khi lưu cấu hình: " + (error.message || "Kết nối mạng hoặc phân quyền không hợp lệ"));
     } finally {
+      console.log("[System] Save progress finished");
       setSavingViettel(false);
     }
   };
@@ -998,47 +1027,110 @@ const System: React.FC = () => {
           </div>
         )}
         {activeTab === 'diagnostics' && (
-          <div className="flex flex-col gap-8 max-w-2xl">
+          <div className="flex flex-col gap-6">
             <div className="flex items-center gap-3 border-b border-neutral-100 pb-4 mb-4">
               <ShieldCheck className="text-gold-primary" />
               <h3 className="text-xl inline-flex items-center gap-4">
-                Chẩn đoán kết nối Database
+                Chẩn đoán kết nối Hệ thống
                 {dbStatus.loading ? (
                   <span className="text-[10px] bg-neutral-100 px-2 py-1 italic animate-pulse">Checking...</span>
                 ) : (
                   <span className={`text-[10px] px-2 py-1 font-black uppercase tracking-widest ${dbStatus.connected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {dbStatus.connected ? 'ONLINE' : 'OFFLINE'}
+                    {dbStatus.connected ? 'DB ONLINE' : 'DB OFFLINE'}
                   </span>
                 )}
               </h3>
             </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* DB Status */}
+              <div className={`p-6 border-l-4 rounded-sm shadow-sm ${dbStatus.connected ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
+                <h4 className="text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${dbStatus.connected ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
+                  Trạng thái Supabase
+                </h4>
+                <p className="text-xs italic mb-4">{dbStatus.message}</p>
+                <button 
+                  onClick={checkConnection}
+                  className="text-[9px] font-black uppercase bg-ink text-paper py-2 px-4 hover:bg-neutral-800 transition-all shadow-sm"
+                >
+                  Thử kết nối lại DB
+                </button>
+              </div>
 
-            <div className={`p-6 border-l-4 ${dbStatus.connected ? 'bg-green-50 border-green-500 text-green-800' : 'bg-red-50 border-red-500 text-red-800'} rounded-sm shadow-sm`}>
-              <p className="font-bold mb-2">Trạng thái hiện tại:</p>
-              <p className="text-sm italic">{dbStatus.message}</p>
+              {/* API Status */}
+              <div className="p-6 border-l-4 border-blue-500 bg-blue-50 rounded-sm shadow-sm">
+                <h4 className="text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  Trạng thái API Server (Proxy)
+                </h4>
+                <div id="api-status-msg" className="text-xs font-bold text-neutral-600 mb-4">
+                  Chưa kiểm tra endpoint nội bộ.
+                </div>
+                <button 
+                  onClick={async () => {
+                     const msg = document.getElementById('api-status-msg');
+                     if (msg) {
+                       msg.innerText = 'Đang gọi /api/health...';
+                       msg.className = 'text-xs font-bold text-neutral-600 mb-4';
+                     }
+                     try {
+                       const resp = await fetch('/api/health');
+                       if (resp.ok) {
+                         const data = await resp.json();
+                         if (msg) {
+                           msg.innerText = `KẾT NỐI SERVER OK! Status: ${data.status}. Env ready: ${data.env?.hasGeminiKey ? 'YES' : 'NO'}`;
+                           msg.className = 'text-xs font-bold text-green-600 mb-4';
+                         }
+                       } else {
+                         if (msg) {
+                           msg.innerText = `SERVER TRẢ VỀ LỖI ${resp.status}. URL gọi: ${window.location.origin}/api/health`;
+                           msg.className = 'text-xs font-bold text-red-600 mb-4';
+                         }
+                       }
+                     } catch (e: any) {
+                       if (msg) {
+                         msg.innerText = `KHÔNG THỂ GỌI API SERVER: ${e.message}. Kiểm tra xem bạn có đang dùng đúng link preview không? (Verel không hỗ trợ API này)`;
+                         msg.className = 'text-xs font-bold text-red-600 mb-4';
+                       }
+                     }
+                  }}
+                  className="text-[9px] font-black uppercase bg-blue-600 text-white py-2 px-4 hover:bg-blue-700 transition-all shadow-sm"
+                >
+                  Kiểm tra Kết nối API
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-neutral-50 border border-neutral-100 rounded-sm">
-                <p className="text-[10px] uppercase font-black text-neutral-400 mb-2">Cấu hình Supabase</p>
-                <code className="text-[11px] block break-all font-mono">
-                  {import.meta.env.VITE_SUPABASE_URL ? '✓ URL đã cấu hình' : '✗ Thiếu URL'}
-                </code>
+            <div className="bg-neutral-50 p-6 border border-neutral-200 rounded-sm mt-4">
+              <h4 className="text-[10px] font-black uppercase tracking-widest mb-4">Thông tin phiên bản & Quyền hạn</h4>
+              <div className="space-y-3">
+                <div className="flex justify-between text-xs border-b border-neutral-100 pb-2">
+                  <span className="text-neutral-500 uppercase font-bold tracking-tighter">Email hiện tại:</span>
+                  <span className="font-mono font-bold text-ink">{currentUserEmail}</span>
+                </div>
+                <div className="flex justify-between text-xs border-b border-neutral-100 pb-2">
+                  <span className="text-neutral-500 uppercase font-bold tracking-tighter">Vai trò hệ thống:</span>
+                  <span className="font-bold text-ink">{profile?.role || 'Chưa xác định'} {isAdmin && '(ADMIN PRIVILEGES)'}</span>
+                </div>
+                <div className="flex justify-between text-xs border-b border-neutral-100 pb-2">
+                  <span className="text-neutral-500 uppercase font-bold tracking-tighter">Môi trường máy khách:</span>
+                  <span className="font-bold text-neutral-400 italic">
+                    {window.location.hostname === 'localhost' ? 'DEVELOPMENT (Localhost)' : 
+                     window.location.hostname.includes('vercel.app') ? 'PRODUCTION (Vercel - NO API SCRIPT)' : 'CLOUD (Full-stack)'}
+                  </span>
+                </div>
               </div>
-              <div className="p-4 bg-neutral-50 border border-neutral-100 rounded-sm">
-                <p className="text-[10px] uppercase font-black text-neutral-400 mb-2">Xác thực người dùng</p>
-                <code className="text-[11px] block break-all font-mono">
-                  {user ? `✓ Đã đăng nhập: ${user.email}` : '✗ Chưa đăng nhập'}
-                </code>
+              
+              <div className="mt-8 bg-amber-50 p-4 border-l-4 border-amber-400 rounded-sm">
+                 <p className="text-[10px] font-black uppercase text-amber-700 mb-2">Hướng dẫn khắc phục 404</p>
+                 <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Hệ thống này yêu cầu một <strong>Express Server</strong> để proxy các yêu cầu tới Viettel và SJC. <br />
+                    - Nếu bạn đang dùng <strong>nghiatin-v2.vercel.app</strong>: API sẽ không hoạt động vì Vercel không chạy file <code>server.ts</code>. <br />
+                    - Hãy mở ứng dụng bằng đường link <strong>preview/share</strong> từ Google AI Studio để có đầy đủ tính năng.
+                 </p>
               </div>
             </div>
-
-            <button 
-              onClick={checkConnection}
-              className="bg-ink text-paper py-4 px-6 font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-gold-primary hover:text-ink transition-all shadow-lg"
-            >
-              Thử kết nối lại
-            </button>
           </div>
         )}
       </div>

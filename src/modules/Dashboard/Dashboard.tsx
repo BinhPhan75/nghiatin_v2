@@ -29,11 +29,12 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      await Promise.all([
-        fetchDashboardData(),
-        fetchSJCPrices()
-      ]);
+      // Fetch main dashboard data
+      await fetchDashboardData();
       setLoading(false);
+      
+      // Fetch SJC prices in background
+      fetchSJCPrices();
     };
     init();
   }, []);
