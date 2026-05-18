@@ -98,29 +98,26 @@ async function startServer() {
     }
   });
 
-  // Viettel Proxy Route
+  // Flexible Viettel Proxy Route
   app.post('/api/viettel-proxy', async (req, res) => {
-    const { endpoint, method, payload, config } = req.body;
+    const { endpoint, method, payload, headers, dataType } = req.body;
 
-    if (!config || !config.username || !config.password) {
-      return res.status(400).json({ error: 'Thiếu cấu hình Viettel' });
+    if (!endpoint) {
+      return res.status(400).json({ error: 'Thiếu endpoint' });
     }
 
     try {
-      const authHeader = Buffer.from(`${config.username}:${config.password}`).toString('base64');
-      
       console.log(`[Proxy] Calling Viettel: ${method || 'POST'} ${endpoint}`);
 
       const response = await axios({
         url: endpoint,
         method: method || 'POST',
         data: payload,
-        headers: {
-          'Authorization': `Basic ${authHeader}`,
+        headers: headers || {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        timeout: 90000 // Viettel recommends 60-90s timeout
+        timeout: 90000 
       });
 
       res.json(response.data);

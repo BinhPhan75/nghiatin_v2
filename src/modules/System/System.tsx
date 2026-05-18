@@ -42,6 +42,16 @@ const System: React.FC = () => {
   const [dbStatus, setDbStatus] = useState<{ loading: boolean; connected: boolean; message: string }>({ 
     loading: false, connected: false, message: 'Chưa thực hiện kiểm tra' 
   });
+  const [viettelEinvoiceConfig, setViettelEinvoiceConfig] = useState<any>({
+    viettelApiUrl: 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS',
+    viettelUsername: '',
+    viettelPassword: '',
+    viettelSupplierTaxCode: '',
+    viettelTemplateCode: '',
+    viettelInvoiceSeries: '',
+    viettelEnabled: false
+  });
+  const [testingViettel, setTestingViettel] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -90,6 +100,12 @@ const System: React.FC = () => {
       
       if (sysData && sysData.length > 0) {
         setConfig(sysData[0]);
+        if (sysData[0].viettel_einvoice_config) {
+          setViettelEinvoiceConfig({
+            ...viettelEinvoiceConfig,
+            ...sysData[0].viettel_einvoice_config
+          });
+        }
       } else {
         setConfig({
           id: '00000000-0000-0000-0000-000000000000',
@@ -332,6 +348,42 @@ const System: React.FC = () => {
       fetchConfigs();
     } catch (error: any) {
       alert("Lỗi khi lưu cấu hình Viettel: " + error.message);
+    }
+  };
+
+  const handleUpdateViettelEinvoiceConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!config) return;
+
+    try {
+      const { error } = await supabase
+        .from('system_config')
+        .upsert({
+          ...config,
+          viettel_einvoice_config: viettelEinvoiceConfig,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      alert("Đã cập nhật cấu hình hóa đơn điện tử Viettel thành công!");
+      fetchConfigs();
+    } catch (error: any) {
+      alert("Lỗi khi lưu cấu hình: " + error.message);
+    }
+  };
+
+  const testViettelConnection = async () => {
+    setTestingViettel(true);
+    try {
+      const { getViettelAccessToken } = await import('../../services/viettelInvoiceService');
+      const token = await getViettelAccessToken(viettelEinvoiceConfig);
+      if (token) {
+        alert("Kết nối Viettel thành công! Đã lấy được Access Token.");
+      }
+    } catch (error: any) {
+      alert("Lỗi kết nối Viettel: " + error.message);
+    } finally {
+      setTestingViettel(false);
     }
   };
 
@@ -1030,6 +1082,100 @@ const System: React.FC = () => {
             >
               Thử kết nối lại
             </button>
+
+            {/* PHẦN 1 — THÊM FORM CẤU HÌNH VIETTEL */}
+            <div className="mt-12 pt-12 border-t border-neutral-100">
+              <div className="flex items-center gap-3 mb-6">
+                <ShieldCheck className="text-gold-primary" />
+                <h3 className="text-xl uppercase font-black tracking-tight">Cấu hình hóa đơn điện tử Viettel</h3>
+              </div>
+
+              <form onSubmit={handleUpdateViettelEinvoiceConfig} className="bg-neutral-50 p-6 border border-neutral-100 rounded-sm space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="input-field md:col-span-2">
+                    <label>URL API</label>
+                    <input 
+                      type="text" 
+                      value={viettelEinvoiceConfig.viettelApiUrl}
+                      onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelApiUrl: e.target.value})}
+                      placeholder="VD: https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS"
+                    />
+                  </div>
+                  <div className="input-field">
+                    <label>Tài khoản</label>
+                    <input 
+                      type="text" 
+                      value={viettelEinvoiceConfig.viettelUsername}
+                      onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelUsername: e.target.value})}
+                    />
+                  </div>
+                  <div className="input-field">
+                    <label>Mật khẩu</label>
+                    <input 
+                      type="password" 
+                      value={viettelEinvoiceConfig.viettelPassword}
+                      onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelPassword: e.target.value})}
+                    />
+                  </div>
+                  <div className="input-field">
+                    <label>Mã số thuế</label>
+                    <input 
+                      type="text" 
+                      value={viettelEinvoiceConfig.viettelSupplierTaxCode}
+                      onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelSupplierTaxCode: e.target.value})}
+                    />
+                  </div>
+                  <div className="input-field">
+                    <label>Mã mẫu hóa đơn</label>
+                    <input 
+                      type="text" 
+                      value={viettelEinvoiceConfig.viettelTemplateCode}
+                      onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelTemplateCode: e.target.value})}
+                    />
+                  </div>
+                  <div className="input-field">
+                    <label>Ký hiệu hóa đơn</label>
+                    <input 
+                      type="text" 
+                      value={viettelEinvoiceConfig.viettelInvoiceSeries}
+                      onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelInvoiceSeries: e.target.value})}
+                    />
+                  </div>
+                  <div className="flex items-center gap-4 py-4">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className={`w-10 h-6 rounded-full transition-colors relative ${viettelEinvoiceConfig.viettelEnabled ? 'bg-gold-primary' : 'bg-neutral-300'}`}>
+                        <input 
+                          type="checkbox" 
+                          className="hidden"
+                          checked={viettelEinvoiceConfig.viettelEnabled}
+                          onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelEnabled: e.target.checked})}
+                        />
+                        <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${viettelEinvoiceConfig.viettelEnabled ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                      </div>
+                      <span className="text-xs font-black uppercase tracking-widest text-ink">Bật xuất hóa đơn</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex flex-col md:flex-row gap-4 pt-4">
+                  <button 
+                    type="submit"
+                    className="flex-1 bg-ink text-paper py-4 px-6 font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-gold-primary hover:text-ink transition-all shadow-md"
+                  >
+                    <Save size={18} /> Lưu cấu hình
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={testViettelConnection}
+                    disabled={testingViettel}
+                    className="flex-1 border-2 border-ink text-ink py-4 px-6 font-black uppercase text-xs tracking-widest flex items-center justify-center gap-3 hover:bg-ink hover:text-paper transition-all disabled:opacity-50"
+                  >
+                    <Clock size={18} className={testingViettel ? 'animate-spin' : ''} /> 
+                    {testingViettel ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </div>

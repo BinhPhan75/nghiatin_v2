@@ -141,8 +141,12 @@ CREATE TABLE IF NOT EXISTS public.system_config (
   account_no TEXT,
   account_holder TEXT,
   bank_id TEXT, -- Short name/ID code for VietQR (e.g. VCB)
+  viettel_einvoice_config JSONB,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure viettel_einvoice_config column exists
+ALTER TABLE public.system_config ADD COLUMN IF NOT EXISTS viettel_einvoice_config JSONB;
 
 -- ==========================================
 -- 6. VIETTEL CONFIG (Dedicated)

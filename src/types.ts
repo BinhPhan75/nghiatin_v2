@@ -69,6 +69,7 @@ export interface SystemConfig {
   account_no: string;
   account_holder: string;
   bank_id: string; // e.g., ICB for VietinBank, VCB for Vietcombank
+  viettel_einvoice_config?: any; // JSON object for Viettel config
 }
 
 export interface ViettelConfig {

@@ -7,7 +7,7 @@ import { Camera, QrCode, CreditCard, Send, CheckCircle2, Search, ArrowLeftRight,
 import QRScanner from '../../components/QRScanner';
 import { parseCCCD, getVietQRUrl, formatCurrency, removeVietnameseTones, parseVietQR, generateEMVCoQR, getRawQRUrl } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { createViettelInvoice } from '../../services/viettelService';
+import { getViettelConfig, createInvoice } from '../../services/viettelInvoiceService';
 import { FileText, Loader2 } from 'lucide-react';
 
 const Transactions: React.FC = () => {
@@ -427,6 +427,33 @@ const Transactions: React.FC = () => {
         .substring(0, 95);
 
       if (type === 'SELL') {
+        // Auto-issue invoice if enabled
+        const viettelConfig = await getViettelConfig();
+        if (viettelConfig && viettelConfig.viettelEnabled && data && data.length > 0) {
+          try {
+            // Get the first transaction as the main one for the invoice
+            // Note: In a multi-item transaction, we'd ideally bundle them, 
+            // but the current structure creates multiple rows.
+            // For now, we'll pass the first one or a synthetic one.
+            const firstTx = { ...transactions[0], id: data[0].id } as Transaction;
+            const result = await createInvoice(viettelConfig, firstTx);
+            if (result.success) {
+              setInvoiceResult({
+                no: result.invoiceNo,
+                code: "" // our new service doesn't return reservation code yet, we can add it if needed
+              });
+              
+              // Update database with invoice no
+              await supabase.from('transactions').update({
+                invoice_no: result.invoiceNo,
+                invoice_status: 'ISSUED'
+              }).eq('id', data[0].id);
+            }
+          } catch (invError) {
+            console.error("Auto Invoice Error:", invError);
+          }
+        }
+
         if (transferAmount > 0) {
           if (config && config.bank_id && config.account_no && config.account_holder) {
             const emvco = generateEMVCoQR(config.bank_id, config.account_no, config.account_holder, transferAmount, memoClean);
@@ -467,14 +494,31 @@ const Transactions: React.FC = () => {
     if (!lastInsertedId) return;
     setIssuingInvoice(true);
     try {
-      const result = await createViettelInvoice(lastInsertedId);
-      setInvoiceResult({
-        no: result.invoiceNo,
-        code: result.reservationCode
-      });
-      alert(`Đã phát hành hóa đơn thành công! Số: ${result.invoiceNo}`);
+      const vConfig = await getViettelConfig();
+      if (!vConfig) throw new Error("Chưa cấu hình Viettel");
+
+      // Fetch transaction
+      const { data: tx } = await supabase.from('transactions').select('*').eq('id', lastInsertedId).single();
+      if (!tx) throw new Error("Không tìm thấy giao dịch");
+
+      const result = await createInvoice(vConfig, tx as Transaction);
+      if (result.success) {
+        setInvoiceResult({
+          no: result.invoiceNo,
+          code: ""
+        });
+        
+        await supabase.from('transactions').update({
+          invoice_no: result.invoiceNo,
+          invoice_status: 'ISSUED'
+        }).eq('id', lastInsertedId);
+
+        alert(`Đã phát hành hóa đơn thành công! Số: ${result.invoiceNo}`);
+      } else {
+        throw new Error(result.message);
+      }
     } catch (error: any) {
-      alert(error.message);
+      alert("Lỗi xuất hóa đơn: " + error.message);
     } finally {
       setIssuingInvoice(false);
     }
