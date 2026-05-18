@@ -275,6 +275,7 @@ const System: React.FC = () => {
           account_no: config?.account_no || '',
           account_holder: config?.account_holder || '',
           bank_id: config?.bank_id || '',
+          viettel_einvoice_config: viettelEinvoiceConfig, // PRESERVE THIS
           updated_at: new Date().toISOString()
         });
 
@@ -296,8 +297,11 @@ const System: React.FC = () => {
       const { error } = await supabase
         .from('system_config')
         .upsert({
-          ...config,
           id: configId,
+          bank_name: config?.bank_name || '',
+          account_no: config?.account_no || '',
+          account_holder: config?.account_holder || '',
+          bank_id: config?.bank_id || '',
           viettel_einvoice_config: viettelEinvoiceConfig,
           updated_at: new Date().toISOString()
         });

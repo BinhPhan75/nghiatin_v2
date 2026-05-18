@@ -67,52 +67,24 @@ export async function getViettelAccessToken(config: ViettelConfig): Promise<stri
      oauthUrls.push(rootPart + '/auth/oauth/token');
   }
 
-  // 4. Force a clean domain auth attempt (Most reliable for Viettel)
+  // 4. Use dedicated server-side token endpoint for robust authentication
   try {
-    const urlObj = new URL(baseUrl);
-    oauthUrls.unshift(`${urlObj.origin}/auth/oauth/token`);
-  } catch (e) {
-    // skip invalid URL
-  }
+    console.log(`[Service] Requesting token via server-side endpoint`);
+    const response = await axios.post('/api/viettel/token', {
+      username: config.viettelUsername,
+      password: config.viettelPassword
+    });
 
-  // Remove duplicates
-  oauthUrls = Array.from(new Set(oauthUrls));
-
-  let lastErr = null;
-  for (const oauthUrl of oauthUrls) {
-    try {
-      const params = new URLSearchParams();
-      params.append('username', config.viettelUsername);
-      params.append('password', config.viettelPassword || '');
-      params.append('grant_type', 'password');
-
-      console.log(`[Service] Attempting Token from: ${oauthUrl}`);
-
-      const response = await axios.post('/api/viettel-proxy', {
-        endpoint: oauthUrl,
-        method: 'POST',
-        payload: params.toString(),
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
-        }
-      });
-
-      if (response.data && response.data.access_token) {
-        return response.data.access_token;
-      }
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message;
-      console.warn(`[Service] Failed token attempt at ${oauthUrl}:`, errorMsg);
-      lastErr = error;
+    if (response.data && response.data.access_token) {
+      return response.data.access_token;
     }
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.details || error.response?.data?.message || error.message;
+    console.error(`[Service] Server-side token fetch failed:`, errorMsg);
+    throw new Error('Lỗi xác thực Viettel: ' + errorMsg);
   }
 
-  const details = lastErr?.response?.data?.details || 
-                  lastErr?.response?.data?.message || 
-                  lastErr?.response?.data?.error_description || 
-                  lastErr?.message || '';
-  throw new Error('Lỗi xác thực Viettel: ' + details);
+  throw new Error('Lỗi xác thực Viettel: Không nhận được access_token');
 }
 
 /**

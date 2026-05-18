@@ -209,6 +209,41 @@ async function startServer() {
     }
   });
 
+  // Dedicated Viettel Token Route as requested
+  app.post('/api/viettel/token', async (req, res) => {
+    const { username, password } = req.body;
+    const viettelTokenUrl = 'https://api-vinvoice.viettel.vn/auth/oauth/token';
+    
+    // Body must be x-www-form-urlencoded
+    const params = new URLSearchParams();
+    params.append('username', username);
+    params.append('password', password);
+    params.append('grant_type', 'password');
+    params.append('scope', 'openid');
+
+    console.log(`[Viettel Token] Requesting token from: ${viettelTokenUrl}`);
+    console.log(`[Viettel Token] Payload: ${params.toString().replace(password, '********')}`);
+
+    try {
+      const response = await axios.post(viettelTokenUrl, params, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      console.log('[Viettel Token] Token received successfully');
+      res.json(response.data);
+    } catch (error: any) {
+      const status = error.response?.status || 500;
+      const errorData = error.response?.data || error.message;
+      console.error(`[Viettel Token Error] (${status}):`, errorData);
+      res.status(status).json({
+        error: 'Viettel Auth Error',
+        message: error.message,
+        details: errorData
+      });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
