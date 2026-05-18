@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-const supabaseUrl = rawUrl ? new URL(rawUrl).origin : 'https://placeholder.supabase.co';
+const supabaseUrl = rawUrl ? (rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`) : 'https://placeholder.supabase.co';
 const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder').trim();
 
 console.log("Initializing Supabase with URL:", supabaseUrl);

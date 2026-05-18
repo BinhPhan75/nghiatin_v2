@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import axios from 'axios';
@@ -5,20 +6,78 @@ import xml2js from 'xml2js';
 const { parseStringPromise } = xml2js;
 import path from 'path';
 import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 import * as cheerio from 'cheerio';
 
+console.log('[Server] Starting initialization...');
+
 async function startServer() {
+  console.log('[Server] Initializing Express...');
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '20mb' }));
 
   // Health check
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      env: {
+        hasGeminiKey: !!process.env.GEMINI_API_KEY,
+        hasSupabaseUrl: !!process.env.VITE_SUPABASE_URL
+      }
+    });
+  });
+
+  // API Route to analyze CCCD via Gemini (Server-side to protect API Key)
+  app.post('/api/ai/analyze-cccd', async (req, res) => {
+    const { base64Image } = req.body;
+    if (!base64Image) return res.status(400).json({ error: 'Missing image data' });
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on server' });
+    }
+
+    try {
+      const { GoogleGenAI } = await import("@google/generative-ai");
+      const genAI = new GoogleGenAI(apiKey);
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      });
+
+      const prompt = `You are an expert OCR system for Vietnamese ID Cards (CCCD and older CMND). 
+                      Extract the following information from the provided IMAGE of the FRONT side of the card:
+                      - id: The 9 or 12 digit number (Số/No.)
+                      - name: The full name (Họ và tên) in ALL CAPS.
+                      - dob: The date of birth (Ngày sinh) in DD/MM/YYYY format.
+                      - address: The place of residence (Nơi thường trú). 
+                      - cardType: 'OLD' if 9-digit CMND, 'NEW' if 12-digit without chip, 'ELECTRONIC' if with chip.
+                      - side: Should be 'FRONT'.
+                      
+                      Rules:
+                      1. If information is not clearly visible, leave as empty string.
+                      2. Return ONLY a valid JSON object matching the requested fields.`;
+
+      const result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: base64Image.includes(',') ? base64Image.split(',')[1] : base64Image
+          }
+        }
+      ]);
+
+      const text = result.response.text();
+      res.json(JSON.parse(text));
+    } catch (error: any) {
+      console.error('Gemini Server Error:', error);
+      res.status(500).json({ error: 'AI Analysis Failed', details: error.message });
+    }
   });
 
   // API Route to fetch SJC prices

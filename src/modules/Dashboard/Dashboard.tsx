@@ -22,10 +22,26 @@ const Dashboard: React.FC = () => {
   const [sellPieData, setSellPieData] = useState<any[]>([]);
   const [hourlyData, setHourlyData] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [sjcPrices, setSjcPrices] = useState<any[]>([]);
 
   useEffect(() => {
     fetchDashboardData();
+    fetchSJCPrices();
   }, []);
+
+  const fetchSJCPrices = async () => {
+    try {
+      const response = await fetch('/api/gold-prices/sjc');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.items) {
+          setSjcPrices(data.items);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching SJC prices in dashboard:', error);
+    }
+  };
 
   const fetchDashboardData = async () => {
     const today = new Date().toISOString().split('T')[0];
@@ -132,8 +148,25 @@ const Dashboard: React.FC = () => {
       <div className="bg-ink overflow-hidden py-3 border-y border-gold-primary/20 relative shadow-inner">
         <div className="flex whitespace-nowrap animate-ticker">
           <div className="flex gap-20 px-4">
-            {products.length > 0 ? (
+            {sjcPrices.length > 0 ? (
               // Double the array to ensure continuous scrolling
+              [...sjcPrices, ...sjcPrices, ...sjcPrices].map((p, idx) => (
+                <div key={`${p.type}-${idx}`} className="flex items-center gap-4">
+                  <span className="text-gold-primary font-black uppercase text-[10px] tracking-widest italic">{p.type}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] text-paper/50 font-bold uppercase">Mua:</span>
+                      <span className="text-sm font-mono font-bold text-paper">{p.buy}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] text-paper/50 font-bold uppercase">Bán:</span>
+                      <span className="text-sm font-mono font-bold text-gold-primary">{p.sell}</span>
+                    </div>
+                  </div>
+                  <div className="w-1.5 h-1.5 rounded-full bg-gold-primary/30 mx-4" />
+                </div>
+              ))
+            ) : products.length > 0 ? (
               [...products, ...products, ...products].map((p, idx) => (
                 <div key={`${p.id}-${idx}`} className="flex items-center gap-4">
                   <span className="text-gold-primary font-black uppercase text-[10px] tracking-widest italic">{p.name}</span>
@@ -151,7 +184,7 @@ const Dashboard: React.FC = () => {
                 </div>
               ))
             ) : (
-              <span className="text-paper/40 text-[10px] uppercase font-black tracking-widest">Đang cập nhật bảng giá niêm yết...</span>
+              <span className="text-paper/40 text-[10px] uppercase font-black tracking-widest">Đang cập nhật bảng giá niêm yết SJC...</span>
             )}
           </div>
         </div>
