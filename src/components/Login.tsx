@@ -43,6 +43,8 @@ const Login: React.FC = () => {
         setError('Email hoặc mật khẩu không chính xác');
       } else if (authError.message.includes('Email not confirmed')) {
         setError('Tài khoản chưa được xác nhận email. Vui lòng kiểm tra hộp thư hoặc tắt tính năng "Confirm email" trong Supabase.');
+      } else if (authError.message.includes('Invalid path specified in request URL')) {
+        setError('Lỗi cấu hình: Supabase URL không chính xác. Vui lòng kiểm tra lại URL trong phần Cài đặt (Settings).');
       } else {
         setError(`Lỗi: ${authError.message}`);
       }
