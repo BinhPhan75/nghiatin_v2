@@ -1,7 +1,8 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import axios from 'axios';
-import { parseStringPromise } from 'xml2js';
+import xml2js from 'xml2js';
+const { parseStringPromise } = xml2js;
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -14,6 +15,11 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: '10mb' }));
+
+  // Health check
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
 
   // API Route to fetch SJC prices
   app.get('/api/gold-prices/sjc', async (req, res) => {
@@ -100,15 +106,17 @@ async function startServer() {
 
   // Flexible Viettel Proxy Route
   app.post('/api/viettel-proxy', async (req, res) => {
-    const { endpoint, method, payload, headers, dataType } = req.body;
+    console.log('[Proxy] Incoming request to /api/viettel-proxy');
+    const { endpoint, method, payload, headers } = req.body;
 
     if (!endpoint) {
+      console.warn('[Proxy] Missing endpoint in request body');
       return res.status(400).json({ error: 'Thiếu endpoint' });
     }
 
     try {
-      console.log(`[Proxy] Calling Viettel: ${method || 'POST'} ${endpoint}`);
-
+      console.log(`[Proxy] Forwarding ${method || 'POST'} to ${endpoint}`);
+      
       const response = await axios({
         url: endpoint,
         method: method || 'POST',
@@ -117,15 +125,20 @@ async function startServer() {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        timeout: 90000 
+        timeout: 60000 
       });
 
+      console.log(`[Proxy] Success from Viettel: ${endpoint}`);
       res.json(response.data);
     } catch (error: any) {
-      console.error('Viettel Proxy Error:', error.response?.data || error.message);
-      res.status(error.response?.status || 500).json({
-        error: 'Lỗi kết nối Viettel qua Proxy',
-        details: error.response?.data || error.message
+      const status = error.response?.status || 500;
+      const errorData = error.response?.data || error.message;
+      console.error(`[Proxy Error] ${endpoint} (${status}):`, errorData);
+      
+      res.status(status).json({
+        error: 'Proxy Error',
+        message: error.message,
+        details: errorData
       });
     }
   });

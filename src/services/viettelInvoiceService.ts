@@ -94,12 +94,16 @@ export async function getViettelAccessToken(config: ViettelConfig): Promise<stri
         return response.data.access_token;
       }
     } catch (error: any) {
-      console.warn(`[Service] Failed token attempt at ${oauthUrl}:`, error.response?.data?.error || error.message);
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message;
+      console.warn(`[Service] Failed token attempt at ${oauthUrl}:`, errorMsg);
       lastErr = error;
     }
   }
 
-  const details = lastErr?.response?.data?.error_description || lastErr?.message || '';
+  const details = lastErr?.response?.data?.details || 
+                  lastErr?.response?.data?.message || 
+                  lastErr?.response?.data?.error_description || 
+                  lastErr?.message || '';
   throw new Error('Lỗi xác thực Viettel: ' + details);
 }
 
