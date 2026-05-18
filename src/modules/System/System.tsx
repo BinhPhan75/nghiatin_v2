@@ -43,7 +43,7 @@ const System: React.FC = () => {
     loading: false, connected: false, message: 'Chưa thực hiện kiểm tra' 
   });
   const [viettelEinvoiceConfig, setViettelEinvoiceConfig] = useState<any>({
-    viettelApiUrl: 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS',
+    viettelApiUrl: 'https://api-vinvoice.viettel.vn',
     viettelUsername: '',
     viettelPassword: '',
     viettelSupplierTaxCode: '',
@@ -124,18 +124,23 @@ const System: React.FC = () => {
         } as any);
       }
 
-      // 2. Fetch Viettel dedicated config
-      const { data: vDataList, error: vError } = await supabase.from('viettel_config').select('*').limit(1);
+      // 2. Fetch Viettel dedicated config - Order by latest updated
+      const { data: vDataList, error: vError } = await supabase
+        .from('viettel_config')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+        
       if (vError) {
         console.error("Lỗi khi tải cấu hình Viettel:", vError);
       }
       
       if (!vError && vDataList && vDataList.length > 0) {
         const vData = vDataList[0];
-        console.log("[System] Viettel config loaded:", vData.id);
+        console.log("[System] Viettel config loaded:", vData.id, "at", vData.updated_at);
         setViettelEinvoiceConfig({
-          viettelApiUrl: vData.api_url || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS',
-          viettelUsername: vData.username || '',
+          viettelApiUrl: vData.api_url || 'https://api-vinvoice.viettel.vn',
+          viettelUsername: vData.username || vData.app_id || '',
           viettelPassword: vData.password || '',
           viettelSupplierTaxCode: vData.tax_code || '',
           viettelTemplateCode: vData.template_code || '',
@@ -143,7 +148,7 @@ const System: React.FC = () => {
           viettelEnabled: vData.is_sandbox === false
         });
       } else {
-        console.log("[System] No Viettel config found");
+        console.log("[System] No Viettel config found in viettel_config table");
       }
     } catch (error) {
       console.error("Error fetching configs:", error);
@@ -331,10 +336,15 @@ const System: React.FC = () => {
     try {
       console.log("[System] Starting save Viettel config process...");
       
-      // 1. Upsert to dedicated viettel_config table
+      // 1. Fetch existing first to get the correct ID if possible
+      const { data: existing } = await supabase.from('viettel_config').select('id').limit(1);
+      const targetId = existing && existing.length > 0 ? existing[0].id : '00000000-0000-0000-0000-000000000000';
+
+      // 2. Upsert to dedicated viettel_config table
       const viettelPayload = {
-        id: '00000000-0000-0000-0000-000000000000',
+        id: targetId,
         username: viettelEinvoiceConfig.viettelUsername,
+        app_id: viettelEinvoiceConfig.viettelUsername, // Map to app_id as well for compatibility
         password: viettelEinvoiceConfig.viettelPassword,
         tax_code: viettelEinvoiceConfig.viettelSupplierTaxCode,
         api_url: viettelEinvoiceConfig.viettelApiUrl,
@@ -344,7 +354,7 @@ const System: React.FC = () => {
         updated_at: new Date().toISOString()
       };
       
-      console.log("[System] Upserting to viettel_config table:", viettelPayload.id);
+      console.log("[System] Upserting to viettel_config table with ID:", targetId);
       const { error: error1 } = await supabase
         .from('viettel_config')
         .upsert(viettelPayload);
