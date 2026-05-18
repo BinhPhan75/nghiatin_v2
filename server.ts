@@ -209,54 +209,72 @@ async function startServer() {
     }
   });
 
-  // Dedicated Viettel Token Route as requested with fallbacks
+  // Dedicated Viettel Token Route updated for v2.49 (JSON login)
   app.post('/api/viettel/token', async (req, res) => {
     const { username, password, baseUrl } = req.body;
     
     const cleanBaseUrl = baseUrl ? baseUrl.replace(/\/+$/, '') : 'https://api-vinvoice.viettel.vn';
+    const loginUrl = `${cleanBaseUrl}/auth/login`;
 
-    // Fallback URLs to try in order - based on user's new requirement: {baseUrl}/oauth/token
-    const urls = [
-      `${cleanBaseUrl}/oauth/token`,
-      'https://api-vinvoice.viettel.vn/oauth/token',
-      'https://api-vinvoice.viettel.vn/auth/oauth/token',
-      'https://vinvoice.viettel.vn/auth/oauth/token'
-    ];
+    console.log(`[Viettel Token] Requesting token from: ${loginUrl}`);
     
-    const params = new URLSearchParams();
-    params.append('username', username);
-    params.append('password', password);
-    params.append('grant_type', 'password');
-    params.append('scope', 'openid');
-
-    let lastError: any = null;
-
-    for (const url of urls) {
-      console.log(`[Viettel Token] Attempting: ${url}`);
-      try {
-        const response = await axios.post(url, params, {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          }
-        });
-        
-        console.log(`[Viettel Token Success] URL: ${url}, Status: ${response.status}`);
-        return res.json(response.data);
-      } catch (error: any) {
-        const status = error.response?.status || 500;
-        const errorData = error.response?.data || error.message;
-        console.error(`[Viettel Token Failed] URL: ${url}, Status: ${status}, Body:`, JSON.stringify(errorData));
-        lastError = error;
-      }
+    try {
+      // Step 1: Login to get access_token using JSON body
+      const response = await axios.post(loginUrl, {
+        username,
+        password
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      });
+      
+      console.log(`[Viettel Token Success] Status: ${response.status}`);
+      // Return the full response data which includes access_token
+      res.json(response.data);
+    } catch (error: any) {
+      const status = error.response?.status || 500;
+      const errorData = error.response?.data || error.message;
+      console.error(`[Viettel Token Failed] Status: ${status}, Body:`, JSON.stringify(errorData));
+      
+      res.status(status).json({
+        error: 'Viettel Auth Error',
+        details: errorData
+      });
     }
+  });
 
-    // If all URLs fail
-    const status = lastError?.response?.status || 500;
-    const errorData = lastError?.response?.data || lastError?.message;
-    res.status(status).json({
-      error: 'Viettel Auth Error (All endpoints failed)',
-      details: errorData
-    });
+  // Dedicated Viettel Create Invoice Route updated for v2.49 (Cookie auth)
+  app.post('/api/viettel/create-invoice', async (req, res) => {
+    const { baseUrl, taxCode, token, payload } = req.body;
+    
+    const cleanBaseUrl = baseUrl ? baseUrl.replace(/\/+$/, '') : 'https://api-vinvoice.viettel.vn';
+    const invoiceUrl = `${cleanBaseUrl}/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS/createInvoice/${taxCode}`;
+
+    console.log(`[Viettel Invoice] Creating invoice at: ${invoiceUrl}`);
+    
+    try {
+      const response = await axios.post(invoiceUrl, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Cookie': `access_token=${token}`
+        },
+        timeout: 60000
+      });
+      
+      console.log(`[Viettel Invoice Success] Status: ${response.status}`);
+      res.json(response.data);
+    } catch (error: any) {
+      const status = error.response?.status || 500;
+      const errorData = error.response?.data || error.message;
+      console.error(`[Viettel Invoice Failed] Status: ${status}, Body:`, JSON.stringify(errorData));
+      
+      res.status(status).json({
+        error: 'Viettel Creation Error',
+        details: errorData
+      });
+    }
   });
 
   // Vite middleware for development

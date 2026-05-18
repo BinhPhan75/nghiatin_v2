@@ -69,21 +69,23 @@ export async function getViettelAccessToken(config: ViettelConfig): Promise<stri
 
   // 4. Use dedicated server-side token endpoint for robust authentication
   try {
-    console.log(`[Service] Requesting token via server-side endpoint`);
-    const baseUrl = config.viettelApiUrl.trim().replace(/\/+$/, '');
+    const cleanBaseUrl = config.viettelApiUrl.trim().replace(/\/+$/, '');
+    console.log(`[Service] Requesting token via server-side endpoint for ${cleanBaseUrl}`);
+    
     const response = await axios.post('/api/viettel/token', {
       username: config.viettelUsername,
       password: config.viettelPassword,
-      baseUrl: baseUrl
+      baseUrl: cleanBaseUrl
     });
 
     if (response.data && response.data.access_token) {
       return response.data.access_token;
     }
   } catch (error: any) {
-    const errorMsg = error.response?.data?.details || error.response?.data?.message || error.message;
+    const errorData = error.response?.data;
+    const errorMsg = errorData?.details || errorData?.message || errorData?.error || error.message;
     console.error(`[Service] Server-side token fetch failed:`, errorMsg);
-    throw new Error('Lỗi xác thực Viettel: ' + errorMsg);
+    throw new Error('Lỗi xác thực Viettel: ' + (typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg));
   }
 
   throw new Error('Lỗi xác thực Viettel: Không nhận được access_token');
@@ -148,21 +150,14 @@ export async function createInvoice(
       }
     };
 
-    // 3. Construct endpoint based on new requirement: {baseUrl}/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS/createInvoice/{taxCode}
     const cleanBaseUrl = config.viettelApiUrl.trim().replace(/\/+$/, '');
-    const endpoint = `${cleanBaseUrl}/services/einvoiceapplication/api/InvoiceAPI/InvoiceWS/createInvoice/${config.viettelSupplierTaxCode}`;
+    console.log(`[Service] Creating invoice at: ${cleanBaseUrl} with taxCode ${config.viettelSupplierTaxCode}`);
 
-    console.log(`[Service] Creating invoice at: ${endpoint}`);
-
-    const response = await axios.post('/api/viettel-proxy', {
-      endpoint,
-      method: 'POST',
-      payload,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
+    const response = await axios.post('/api/viettel/create-invoice', {
+      baseUrl: cleanBaseUrl,
+      taxCode: config.viettelSupplierTaxCode,
+      token: token,
+      payload: payload
     });
 
     const data = response.data;

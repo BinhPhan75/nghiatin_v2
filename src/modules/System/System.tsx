@@ -400,13 +400,17 @@ const System: React.FC = () => {
 
   const testViettelConnection = async () => {
     setTestingViettel(true);
+    setLastError(null);
     try {
+      console.log("[System] Testing Viettel connection with v2.49 API logic...");
       const token = await getViettelAccessToken(viettelEinvoiceConfig);
       if (token) {
-        alert("Kết nối Viettel thành công! Đã lấy được Access Token.");
+        alert("✅ Kết nối Viettel thành công!\n\nĐã lấy được Access Token: " + token.substring(0, 30) + "...");
       }
     } catch (error: any) {
-      alert("Lỗi kết nối Viettel: " + error.message);
+      console.error("[System] Viettel Connection Test Failed:", error);
+      setLastError(error);
+      alert("❌ Lỗi kết nối Viettel:\n" + (error.message || "Kết nối mạng hoặc thông tin đăng nhập không hợp lệ"));
     } finally {
       setTestingViettel(false);
     }
