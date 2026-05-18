@@ -106,7 +106,7 @@ body {
 }
 
 .btn-toggle.active {
-  @apply bg-ink text-paper border-ink;
+  @apply bg-gold-primary text-ink border-gold-primary;
 }
 
 .vcb-btn {
@@ -114,7 +114,7 @@ body {
 }
 
 .nav-item-bold {
-  @apply w-12 h-12 md:w-14 md:h-14 border border-gold-primary/30 flex items-center justify-center text-[8px] uppercase font-black tracking-tighter text-gold-primary transition-all hover:bg-gold-primary hover:text-ink;
+  @apply w-12 h-12 md:w-14 md:h-14 border border-gold-primary/30 flex flex-col items-center justify-center text-gold-primary transition-all hover:bg-gold-primary hover:text-ink;
 }
 
 .nav-item-mobile {

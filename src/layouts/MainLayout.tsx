@@ -41,10 +41,10 @@ const MainLayout: React.FC = () => {
             <NavLink
               key={item.to}
               to={item.to}
-              title={item.label}
               className={({ isActive }) => `nav-item-bold ${isActive ? 'active' : ''}`}
             >
               <item.icon size={20} />
+              <span className="text-[7px] font-black uppercase mt-1 tracking-tighter">{item.label}</span>
             </NavLink>
           ))}
         </div>

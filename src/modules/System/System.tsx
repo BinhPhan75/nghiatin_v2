@@ -266,14 +266,15 @@ const System: React.FC = () => {
     if (!config) return;
 
     try {
+      const configId = config?.id || '00000000-0000-0000-0000-000000000000';
       const { error } = await supabase
         .from('system_config')
         .upsert({
-          id: config.id || '00000000-0000-0000-0000-000000000000',
-          bank_name: config.bank_name || '',
-          account_no: config.account_no || '',
-          account_holder: config.account_holder || '',
-          bank_id: config.bank_id || '',
+          id: configId,
+          bank_name: config?.bank_name || '',
+          account_no: config?.account_no || '',
+          account_holder: config?.account_holder || '',
+          bank_id: config?.bank_id || '',
           updated_at: new Date().toISOString()
         });
 
@@ -291,10 +292,12 @@ const System: React.FC = () => {
     if (!config) return;
 
     try {
+      const configId = config?.id || '00000000-0000-0000-0000-000000000000';
       const { error } = await supabase
         .from('system_config')
         .upsert({
           ...config,
+          id: configId,
           viettel_einvoice_config: viettelEinvoiceConfig,
           updated_at: new Date().toISOString()
         });

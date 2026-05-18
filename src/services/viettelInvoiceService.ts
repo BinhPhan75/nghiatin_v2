@@ -67,6 +67,14 @@ export async function getViettelAccessToken(config: ViettelConfig): Promise<stri
      oauthUrls.push(rootPart + '/auth/oauth/token');
   }
 
+  // 4. Force a clean domain auth attempt (Most reliable for Viettel)
+  try {
+    const urlObj = new URL(baseUrl);
+    oauthUrls.unshift(`${urlObj.origin}/auth/oauth/token`);
+  } catch (e) {
+    // skip invalid URL
+  }
+
   // Remove duplicates
   oauthUrls = Array.from(new Set(oauthUrls));
 
