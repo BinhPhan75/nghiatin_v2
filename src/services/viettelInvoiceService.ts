@@ -151,7 +151,7 @@ export async function createInvoice(
     }
   } catch (error: any) {
     console.error('createInvoice Error:', error);
-    const details = error.response?.data?.details || error.message;
+    const details = error.response?.data?.description || error.response?.data?.details || error.message;
     return {
       success: false,
       invoiceNo: "",

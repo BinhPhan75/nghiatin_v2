@@ -7,6 +7,7 @@ const { parseStringPromise } = xml2js;
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as cheerio from 'cheerio';
+import { ViettelSInvoiceBackendService } from './src/services/ViettelSInvoiceBackend.js';
 
 console.log('[Server] Starting initialization...');
 
@@ -347,47 +348,60 @@ async function startServer() {
     
     // Normalize service url safely
     const normalizedSvc = normalizeServiceUrl(serviceUrl);
-    let invoiceUrl = '';
-    const cleanSvcStr = normalizedSvc.replace(/\/+$/, '');
-    
-    if (cleanSvcStr.includes('/InvoiceAPI/InvoiceWS/createInvoice')) {
-      const baseUrlPart = cleanSvcStr.split('/InvoiceAPI/')[0];
-      invoiceUrl = `${baseUrlPart}/InvoiceAPI/InvoiceWS/createInvoice/${taxCode}`;
-    } else {
-      invoiceUrl = `${cleanSvcStr}/InvoiceAPI/InvoiceWS/createInvoice/${taxCode}`;
+    let originUrl = 'https://api-vinvoice.viettel.vn';
+    try {
+      const parsedUrl = new URL(normalizedSvc);
+      originUrl = parsedUrl.origin;
+    } catch (e) {
+      // fallback
     }
 
-    console.log(`[Viettel Invoice] Creating invoice at: ${invoiceUrl}`);
-    console.log(`[Viettel Invoice Header]: Authorization: Basic ${token ? token.substring(0, 10) + '...' : 'MISSING'}`);
+    console.log(`[Viettel S-Invoice Backend] Utilizing ViettelSInvoiceBackendService proxy for taxCode: ${taxCode}`);
+    console.log(`[Viettel S-Invoice Backend] base service url: ${originUrl}`);
     
     try {
-      const response = await axios.post(invoiceUrl, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Basic ${token}`
-        },
-        timeout: 60000,
-        validateStatus: () => true
-      });
+      // 1. Instantiate the official backend service integration module
+      const backendService = new ViettelSInvoiceBackendService(originUrl);
       
-      console.log(`[Viettel Invoice] URL: ${invoiceUrl}, Status: ${response.status}`);
-      console.log(`[Viettel Invoice Response Body]:`, JSON.stringify(response.data));
+      // 2. Map basic authentication credentials out of token string (Username:Password Base64)
+      let username = taxCode;
+      let password = '';
       
-      if (response.status >= 200 && response.status < 300) {
-        res.json(response.data);
-      } else {
-        res.status(response.status).json({
-          error: 'Viettel Creation Error',
-          status: response.status,
-          details: response.data
-        });
+      if (token) {
+        try {
+          const decoded = Buffer.from(token, 'base64').toString('utf8');
+          if (decoded.includes(':')) {
+            const parts = decoded.split(':');
+            username = parts[0];
+            password = parts.slice(1).join(':');
+          } else {
+            password = token;
+          }
+        } catch (e) {
+          password = token;
+        }
       }
+
+      // 3. Extract items to match precise DTO parameters
+      const { generalInvoiceInfo, ...restPayload } = payload;
+      
+      // 4. Fire secure creation request
+      const response = await backendService.createInvoice(
+        username,
+        password,
+        taxCode,
+        {
+          generalInvoiceInfo: generalInvoiceInfo,
+          ...restPayload
+        }
+      );
+      
+      res.json(response);
     } catch (error: any) {
       console.error(`[Viettel Invoice Exception]:`, error.message);
       res.status(500).json({
-        error: 'Viettel Server Exception',
-        message: error.message
+        errorCode: 'PROXY_SERVER_EXCEPTION',
+        description: error.message || 'Lỗi hệ thống khi chuẩn hóa dữ liệu hoặc kết nối dịch vụ Viettel S-Invoice'
       });
     }
   });
