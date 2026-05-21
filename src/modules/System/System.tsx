@@ -982,7 +982,7 @@ const System: React.FC = () => {
                     onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelAuthUrl: e.target.value})}
                     placeholder="https://api-vinvoice.viettel.vn/auth/login"
                   />
-                  <p className="text-[9px] text-neutral-400 mt-1 italic">Thử: <b>https://api-vinvoice.viettel.vn/auth/login</b> hoặc <b>https://api-vinvoice.viettel.vn/services/einvoiceapplication/api/auth/login</b></p>
+                  <p className="text-[9px] text-neutral-400 mt-1 italic">Hệ thống tự động sửa chuẩn hóa. Bạn chỉ cần điền tên miền Viettel cấp (ví dụ: api-vinvoice.viettel.vn hoặc api-vinvoice-demo.viettel.vn)</p>
                 </div>
 
                 <div className="input-field">
@@ -994,7 +994,7 @@ const System: React.FC = () => {
                     onChange={e => setViettelEinvoiceConfig({...viettelEinvoiceConfig, viettelServiceUrl: e.target.value})}
                     placeholder="https://api-vinvoice.viettel.vn/services/einvoiceapplication/api"
                   />
-                  <p className="text-[9px] text-neutral-400 mt-1 italic text-blue-400">Thử: <b>https://api-vinvoice.viettel.vn/services/einvoiceapplication/api</b></p>
+                  <p className="text-[9px] text-neutral-400 mt-1 italic text-blue-400">Hệ thống tự động thêm đường dẫn tạo hóa đơn chuẩn. Chỉ cần nhập tên miền gốc hoặc link dịch vụ gốc</p>
                 </div>
                 
                 <div className="input-field">

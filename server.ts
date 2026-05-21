@@ -209,24 +209,96 @@ async function startServer() {
     }
   });
 
+  // Helper to normalize URLs
+  const normalizeAuthUrl = (urlInput: string): string => {
+    let url = (urlInput || '').trim();
+    if (!url) {
+      return 'https://api-vinvoice.viettel.vn/auth/login';
+    }
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    url = url.replace(/\/+$/, '');
+    try {
+      const parsed = new URL(url);
+      const origin = parsed.origin;
+      const path = parsed.pathname;
+      if (path === '/' || path === '') {
+        return `${origin}/auth/login`;
+      }
+      if (path.endsWith('/auth/login')) {
+        return url;
+      }
+      if (!path.includes('/auth/')) {
+        if (path.includes('/services/')) {
+          return `${origin}/auth/login`;
+        }
+        return `${url}/auth/login`;
+      }
+      return url;
+    } catch (e) {
+      if (!url.includes('/auth/login')) {
+        return `${url}/auth/login`;
+      }
+      return url;
+    }
+  };
+
+  const normalizeServiceUrl = (urlInput: string): string => {
+    let url = (urlInput || '').trim();
+    if (!url) {
+      return 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api';
+    }
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    url = url.replace(/\/+$/, '');
+    try {
+      const parsed = new URL(url);
+      const origin = parsed.origin;
+      const path = parsed.pathname;
+      if (path === '/' || path === '') {
+        return `${origin}/services/einvoiceapplication/api`;
+      }
+      if (path.includes('/services/einvoiceapplication/api')) {
+        return url;
+      }
+      if (path.includes('/auth/')) {
+        return `${origin}/services/einvoiceapplication/api`;
+      }
+      return `${url}/services/einvoiceapplication/api`;
+    } catch (e) {
+      if (!url.includes('/services/einvoiceapplication/api')) {
+        return `${url}/services/einvoiceapplication/api`;
+      }
+      return url;
+    }
+  };
+
   // Dedicated Viettel Token Route updated for v2.49 (JSON login)
   app.post('/api/viettel/token', async (req, res) => {
     const { username, password, authUrl } = req.body;
     
-    // Default to production JSON login if not provided
-    const primaryUrl = authUrl || 'https://api-vinvoice.viettel.vn/auth/login';
-    
-    // Construct fallback URL if primary doesn't have the standard prefix
+    // Normalize user entered login API path
+    const primaryUrl = normalizeAuthUrl(authUrl);
     let urlsToTry = [primaryUrl];
-    if (!primaryUrl.includes('/services/einvoiceapplication/api/')) {
-        const domain = new URL(primaryUrl).origin;
-        urlsToTry.push(`${domain}/services/einvoiceapplication/api/auth/login`);
+    
+    try {
+      const parsed = new URL(primaryUrl);
+      const origin = parsed.origin;
+      const var1 = `${origin}/auth/login`;
+      const var2 = `${origin}/services/einvoiceapplication/api/auth/login`;
+      
+      if (!urlsToTry.includes(var1)) urlsToTry.push(var1);
+      if (!urlsToTry.includes(var2)) urlsToTry.push(var2);
+    } catch (e) {
+      // ignore
     }
 
     let lastResponse: any = null;
 
     for (const url of urlsToTry) {
-        console.log(`[Viettel Token] Attempting: ${url}`);
+        console.log(`[Viettel Token] Trying normalized endpoint: ${url}`);
         try {
             const response = await axios.post(url, {
                 username,
@@ -240,17 +312,17 @@ async function startServer() {
                 validateStatus: () => true
             });
             
-            console.log(`[Viettel Token] URL: ${url}, Status: ${response.status}`);
+            console.log(`[Viettel Token Output] URL: ${url}, Status: ${response.status}`);
             lastResponse = response;
 
             if (response.status >= 200 && response.status < 300) {
-                console.log(`[Viettel Token Success] Access Token obtained`);
+                console.log(`[Viettel Token Success] Access Token obtained via URL: ${url}`);
                 return res.json(response.data);
             }
             
-            // If it's a 404, we continue to fallback if available
-            if (response.status !== 404) {
-                // If it's an auth error (401, 403), we stop and return it
+            // If Credentials are flat empty or wrong (401 or 403), stop attempting other gateways
+            if (response.status === 401 || response.status === 403) {
+                console.log(`[Viettel Token Credentials Issue] Auth failure (${response.status}) at ${url}`);
                 break;
             }
         } catch (error: any) {
@@ -273,9 +345,17 @@ async function startServer() {
   app.post('/api/viettel/create-invoice', async (req, res) => {
     const { serviceUrl, taxCode, token, payload } = req.body;
     
-    // Construct endpoint: {serviceUrl}/InvoiceAPI/InvoiceWS/createInvoice/{taxCode}
-    const cleanServiceUrl = serviceUrl ? serviceUrl.replace(/\/+$/, '') : 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api';
-    const invoiceUrl = `${cleanServiceUrl}/InvoiceAPI/InvoiceWS/createInvoice/${taxCode}`;
+    // Normalize service url safely
+    const normalizedSvc = normalizeServiceUrl(serviceUrl);
+    let invoiceUrl = '';
+    const cleanSvcStr = normalizedSvc.replace(/\/+$/, '');
+    
+    if (cleanSvcStr.includes('/InvoiceAPI/InvoiceWS/createInvoice')) {
+      const baseUrlPart = cleanSvcStr.split('/InvoiceAPI/')[0];
+      invoiceUrl = `${baseUrlPart}/InvoiceAPI/InvoiceWS/createInvoice/${taxCode}`;
+    } else {
+      invoiceUrl = `${cleanSvcStr}/InvoiceAPI/InvoiceWS/createInvoice/${taxCode}`;
+    }
 
     console.log(`[Viettel Invoice] Creating invoice at: ${invoiceUrl}`);
     console.log(`[Viettel Invoice Header]: Authorization: Basic ${token ? token.substring(0, 10) + '...' : 'MISSING'}`);
