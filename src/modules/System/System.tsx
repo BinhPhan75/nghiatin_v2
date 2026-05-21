@@ -115,8 +115,8 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
       // 1. Fetch system general config (Bank info)
       const { data: sysData, error: sysError } = await withTimeout(
         supabase.from('system_config').select('*').limit(1),
-        8000,
-        "Không thể tải cấu hình chung từ cơ sở dữ liệu Supabase (Hết hạn truy vấn 8 giây)."
+        45000,
+        "Không thể tải cấu hình chung từ cơ sở dữ liệu Supabase (Hết hạn truy vấn 45 giây. Nếu bạn dùng gói miễn phí, có thể cơ sở dữ liệu đang trong quá trình đánh thức/khởi động nguội - vui lòng đợi chút rồi thử lại)."
       );
       if (sysError) {
         console.error("Lỗi khi tải cấu hình hệ thống:", sysError);
@@ -149,8 +149,8 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
           .select('*')
           .order('updated_at', { ascending: false })
           .limit(1),
-        8000,
-        "Không thể tải cấu hình Viettel từ cơ sở dữ liệu Supabase (Hết hạn kết nối 8 giây)."
+        45000,
+        "Không thể tải cấu hình Viettel từ cơ sở dữ liệu Supabase (Hết hạn kết nối 45 giây. Nếu bạn dùng gói Supabase miễn phí, có thể database đang khởi động lại từ chế độ ngủ - vui lòng đợi ít giây)."
       );
         
       if (vError) {
@@ -392,8 +392,8 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
       // 1. Fetch existing first to get the correct ID if possible
       const { data: existing } = await withTimeout(
         supabase.from('viettel_config').select('id').limit(1),
-        8000,
-        "Hết hạn kết nối kiểm tra dữ liệu lưu cấu hình từ bảng viettel_config (8 giây)."
+        45000,
+        "Hết hạn kết nối kiểm tra dữ liệu lưu cấu hình từ bảng viettel_config (45 giây). Có thể cơ sở dữ liệu vừa thức giấc hoặc bị nghẽn mạng."
       );
       const targetId = existing && existing.length > 0 ? existing[0].id : '00000000-0000-0000-0000-000000000000';
 
@@ -417,8 +417,8 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
         supabase
           .from('viettel_config')
           .upsert(viettelPayload),
-        8000,
-        "Hết hạn kết nối lưu thông tin vào bảng viettel_config (8 giây)."
+        45000,
+        "Hết hạn kết nối lưu thông tin vào bảng viettel_config (45 giây)."
       );
 
       if (error1) {
@@ -474,8 +474,8 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
           .select('*')
           .order('updated_at', { ascending: false })
           .limit(1),
-        8000,
-        "Không thể tải cấu hình lưu trữ từ bảng viettel_config (Hết hạn kết nối Supabase 8 giây)."
+        45000,
+        "Không thể tải cấu hình lưu trữ từ bảng viettel_config (Hết hạn kết nối Supabase 45 giây. Vui lòng kiểm tra lại trạng thái dự án của bạn trên trang quản trị Supabase)."
       );
         
       if (vError) {
