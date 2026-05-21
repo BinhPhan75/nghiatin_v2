@@ -331,6 +331,50 @@ async function startServer() {
         }
     }
 
+    // --- BEGIN FALLBACK FOR PURE BASIC AUTH SYSTEMS (PROD S-INVOICE) ---
+    // If standard token endpoints returned 404 (common on production S-Invoice which uses direct Basic Authentication instead of JSON token servers),
+    // we verify the credentials directly by querying the getCustomFields API using Basic Authentication.
+    const isMismatchedOrNotFound = !lastResponse || lastResponse.status === 404;
+    
+    if (isMismatchedOrNotFound && username && password) {
+      try {
+        const parsed = new URL(primaryUrl);
+        const origin = parsed.origin;
+        const testEndpoint = `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${encodeURIComponent(username)}&templateCode=1`;
+        
+        console.log(`[Viettel Token Fallback] Login endpoint returned 404. Testing direct S-Invoice metadata API with Basic Auth: ${testEndpoint}`);
+        
+        const loginStr = `${username.trim()}:${password}`;
+        const base64AuthToken = Buffer.from(loginStr).toString('base64');
+        
+        const testResponse = await axios.get(testEndpoint, {
+          headers: {
+            'Authorization': `Basic ${base64AuthToken}`,
+            'Accept': 'application/json'
+          },
+          timeout: 25000,
+          validateStatus: () => true
+        });
+        
+        console.log(`[Viettel Token Fallback] testResponse Status: ${testResponse.status}`);
+        
+        // If the credentials are valid, the server will either return 200 (success), or custom 404 or business error
+        // (but NOT HTTP 401/403 Authentication Failed!)
+        if (testResponse.status !== 401 && testResponse.status !== 403 && testResponse.status !== 502 && testResponse.status !== 504) {
+          console.log(`[Viettel Token Fallback] Authentication Succeeded! Generating Basic Auth wrapper token.`);
+          return res.json({
+            access_token: base64AuthToken,
+            description: "Xác thực Basic Authentication thành công thông qua S-Invoice API"
+          });
+        } else {
+          lastResponse = testResponse; // Pass the authentication failure back (e.g. 401/403)
+        }
+      } catch (e: any) {
+        console.error(`[Viettel Token Fallback Error]:`, e.message);
+      }
+    }
+    // --- END FALLBACK ---
+
     if (lastResponse) {
         return res.status(lastResponse.status).json({
             error: 'Viettel Auth Error',
