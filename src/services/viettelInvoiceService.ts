@@ -20,20 +20,45 @@ export interface InvoiceResult {
 }
 
 /**
+ * Helper to query Supabase with a fast-failing timeout
+ */
+async function querySupabaseWithTimeout<T = any>(
+  queryPromise: any,
+  timeoutMs = 3000
+): Promise<T> {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('Hết hạn kết nối tới cơ sở dữ liệu Supabase (timeout)'));
+    }, timeoutMs);
+  });
+  try {
+    const res = await Promise.race([Promise.resolve(queryPromise), timeoutPromise]);
+    clearTimeout(timeoutId);
+    return res as T;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
+/**
  * Get Viettel configuration from system_config (with viettel_config table sync)
  */
 export async function getViettelConfig(): Promise<ViettelConfig | null> {
   try {
-    // 1. Thử tải cấu hình từ bảng viettel_config trực tiếp để cập nhật thời gian thực
-    const { data, error } = await supabase
+    // 1. Thử tải cấu hình từ bảng viettel_config trực tiếp với timeout 3 giây
+    const query = supabase
       .from('viettel_config')
       .select('*')
       .order('updated_at', { ascending: false })
       .limit(1);
+      
+    const { data, error } = await querySupabaseWithTimeout(query, 3000);
 
     if (!error && data && data.length > 0) {
       const active = data[0];
-      return {
+      const result = {
         viettelAuthUrl: active.api_url || 'https://api-vinvoice.viettel.vn',
         viettelServiceUrl: active.api_url || 'https://api-vinvoice.viettel.vn',
         viettelUsername: active.username || '',
@@ -43,21 +68,47 @@ export async function getViettelConfig(): Promise<ViettelConfig | null> {
         viettelInvoiceSeries: active.invoice_series || '',
         viettelEnabled: true
       };
+      try {
+        localStorage.setItem('cached_viettel_config', JSON.stringify(result));
+      } catch (e) {}
+      return result;
     }
   } catch (err) {
-    console.warn('[Service] Lỗi khi nạp từ viettel_config, thử fallback sang system_config:', err);
+    console.warn('[Service] Lỗi khi nạp từ viettel_config (hoặc timeout), thử fallback sang system_config:', err);
   }
 
-  // 2. Chế độ dự phòng: Tải từ system_config
-  const { data, error } = await supabase
-    .from('system_config')
-    .select('*')
-    .limit(1)
-    .single();
+  // 2. Chế độ dự phòng: Tải từ system_config với timeout 3 giây
+  try {
+    const query = supabase
+      .from('system_config')
+      .select('*')
+      .limit(1)
+      .single();
+      
+    const { data, error } = await querySupabaseWithTimeout(query, 3000);
 
-  if (error || !data || !data.viettel_einvoice_config) return null;
-  
-  return data.viettel_einvoice_config as ViettelConfig;
+    if (!error && data && data.viettel_einvoice_config) {
+      try {
+        localStorage.setItem('cached_viettel_config', JSON.stringify(data.viettel_einvoice_config));
+      } catch (e) {}
+      return data.viettel_einvoice_config as ViettelConfig;
+    }
+  } catch (err) {
+    console.warn('[Service] Lỗi khi nạp từ system_config (hoặc timeout):', err);
+  }
+
+  // 3. Khôi phục từ Cache Local Storage
+  try {
+    const cached = localStorage.getItem('cached_viettel_config');
+    if (cached) {
+      console.log('[Service] Đã kích hoạt khôi phục cấu hình Viettel từ Cache cục bộ thành công.');
+      return JSON.parse(cached);
+    }
+  } catch (e) {
+    console.warn('[Service] Không thể đọc cache:', e);
+  }
+
+  return null;
 }
 
 /**
@@ -162,16 +213,17 @@ export async function createInvoice(
     // Nạp thô cấu hình cơ sở dữ liệu từ bảng viettel_config để đồng bộ hóa cho backend xử lý
     let rawDbConfig: any = null;
     try {
-      const { data } = await supabase
+      const query = supabase
         .from('viettel_config')
         .select('*')
         .order('updated_at', { ascending: false })
         .limit(1);
+      const { data } = await querySupabaseWithTimeout(query, 2500);
       if (data && data.length > 0) {
         rawDbConfig = data[0];
       }
     } catch (dbErr) {
-      console.warn('[Service] Không thể tải cấu hình thô từ viettel_config cho backend:', dbErr);
+      console.warn('[Service] Không thể tải cấu hình thô từ viettel_config cho backend (sử dụng cấu hình mặc định):', dbErr);
     }
 
     const response = await axios.post('/api/viettel/create-invoice', {
@@ -222,16 +274,17 @@ export async function testViettelConnectionAPI(
     // Fetch raw config from Supabase to match backend expectation
     let rawDbConfig: any = null;
     try {
-      const { data } = await supabase
+      const query = supabase
         .from('viettel_config')
         .select('*')
         .order('updated_at', { ascending: false })
         .limit(1);
+      const { data } = await querySupabaseWithTimeout(query, 2500);
       if (data && data.length > 0) {
         rawDbConfig = data[0];
       }
     } catch (err) {
-      console.warn('[Service] fallback dbConfig:', err);
+      console.warn('[Service] fallback dbConfig (timeout or offline):', err);
     }
 
     const response = await axios.post('/api/viettel/test-connection', {

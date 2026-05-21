@@ -481,17 +481,16 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
       }
 
       setSuccessMsg("Đã cập nhật cấu hình hóa đơn điện tử Viettel thành công!");
-      
-      // Refetch to ensure state is in sync
+      setTimeout(() => setSuccessMsg(null), 3000);
       await fetchConfigs();
-      
-      setTimeout(() => setSuccessMsg(null), 5000);
     } catch (error: any) {
       console.error("[System] Total Save Viettel Config Error:", error);
-      setLastError(error);
-      alert("Lỗi khi lưu cấu hình: " + (error.message || "Kết nối mạng hoặc phân quyền không hợp lệ"));
+      setLastError({
+        source: 'save_viettel_config',
+        message: error.message || 'Lỗi lưu cấu hình Viettel. Vui lòng bấm thử lại kết nối lưu để kiểm tra.',
+        stack: error.stack
+      });
     } finally {
-      console.log("[System] Save progress finished");
       setSavingViettel(false);
     }
   };
@@ -501,38 +500,21 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
     setLastError(null);
     setViettelTestResult(null);
     try {
-      console.log("[System] Testing Viettel connection directly from saved `viettel_config` table...");
+      console.log("[System] Testing Viettel connection directly using current form fields config...");
       
-      // 1. Fetch the latest configuration row from viettel_config table
-      const { data: vDataList, error: vError } = await withTimeout(
-        supabase
-          .from('viettel_config')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(1),
-        45000,
-        "Không thể tải cấu hình lưu trữ từ bảng viettel_config (Hết hạn kết nối Supabase 45 giây. Vui lòng kiểm tra lại trạng thái dự án của bạn trên trang quản trị Supabase)."
-      );
-        
-      if (vError) {
-        throw new Error("Lỗi tải thông tin từ bảng viettel_config: " + vError.message);
+      if (!viettelEinvoiceConfig.viettelUsername) {
+        throw new Error("Vui lòng điền Tài khoản đăng nhập Viettel trước khi kiểm tra!");
       }
       
-      if (!vDataList || vDataList.length === 0) {
-        throw new Error("Không tìm thấy cấu hình hóa đơn điện tử Viettel nào được lưu trong bảng viettel_config! Vui lòng lưu cấu hình trước khi kiểm tra.");
-      }
-
-      const vData = vDataList[0];
-      const jsonCfg = vData.viettel_einvoice_config || {};
       const configToTest = {
-        viettelAuthUrl: vData.auth_url || jsonCfg.viettelAuthUrl || 'https://api-vinvoice.viettel.vn/auth/login',
-        viettelServiceUrl: vData.api_url || jsonCfg.viettelServiceUrl || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api',
-        viettelUsername: vData.username || vData.app_id || '',
-        viettelPassword: vData.password || '',
-        viettelSupplierTaxCode: vData.tax_code || '',
-        viettelTemplateCode: vData.template_code || '',
-        viettelInvoiceSeries: vData.invoice_series || '',
-        viettelEnabled: vData.is_sandbox === false
+        viettelAuthUrl: viettelEinvoiceConfig.viettelAuthUrl || 'https://api-vinvoice.viettel.vn/auth/login',
+        viettelServiceUrl: viettelEinvoiceConfig.viettelServiceUrl || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api',
+        viettelUsername: viettelEinvoiceConfig.viettelUsername,
+        viettelPassword: viettelEinvoiceConfig.viettelPassword || '',
+        viettelSupplierTaxCode: viettelEinvoiceConfig.viettelSupplierTaxCode || '',
+        viettelTemplateCode: viettelEinvoiceConfig.viettelTemplateCode || '',
+        viettelInvoiceSeries: viettelEinvoiceConfig.viettelInvoiceSeries || '',
+        viettelEnabled: viettelEinvoiceConfig.viettelEnabled
       };
 
       console.log("[System] Testing connection using configuration with username:", configToTest.viettelUsername);
