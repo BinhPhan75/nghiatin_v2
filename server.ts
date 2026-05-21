@@ -389,7 +389,7 @@ async function startServer() {
 
   // Dedicated Viettel Create Invoice Route updated for v2.49 (Basic auth)
   app.post('/api/viettel/create-invoice', async (req, res) => {
-    const { serviceUrl, taxCode, token, payload } = req.body;
+    const { serviceUrl, taxCode, token, payload, dbConfig } = req.body;
     
     // Normalize service url safely
     const normalizedSvc = normalizeServiceUrl(serviceUrl);
@@ -438,7 +438,8 @@ async function startServer() {
         {
           generalInvoiceInfo: generalInvoiceInfo,
           ...restPayload
-        }
+        },
+        dbConfig
       );
       
       res.json(response);

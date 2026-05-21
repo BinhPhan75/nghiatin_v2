@@ -20,9 +20,35 @@ export interface InvoiceResult {
 }
 
 /**
- * Get Viettel configuration from system_config
+ * Get Viettel configuration from system_config (with viettel_config table sync)
  */
 export async function getViettelConfig(): Promise<ViettelConfig | null> {
+  try {
+    // 1. Thử tải cấu hình từ bảng viettel_config trực tiếp để cập nhật thời gian thực
+    const { data, error } = await supabase
+      .from('viettel_config')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (!error && data && data.length > 0) {
+      const active = data[0];
+      return {
+        viettelAuthUrl: active.api_url || 'https://api-vinvoice.viettel.vn',
+        viettelServiceUrl: active.api_url || 'https://api-vinvoice.viettel.vn',
+        viettelUsername: active.username || '',
+        viettelPassword: active.password || '',
+        viettelSupplierTaxCode: active.tax_code || '',
+        viettelTemplateCode: active.template_code || '',
+        viettelInvoiceSeries: active.invoice_series || '',
+        viettelEnabled: true
+      };
+    }
+  } catch (err) {
+    console.warn('[Service] Lỗi khi nạp từ viettel_config, thử fallback sang system_config:', err);
+  }
+
+  // 2. Chế độ dự phòng: Tải từ system_config
   const { data, error } = await supabase
     .from('system_config')
     .select('*')
@@ -133,11 +159,27 @@ export async function createInvoice(
     const serviceUrl = config.viettelServiceUrl || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api';
     console.log(`[Service] Creating invoice via server proxy at serviceUrl: ${serviceUrl}`);
 
+    // Nạp thô cấu hình cơ sở dữ liệu từ bảng viettel_config để đồng bộ hóa cho backend xử lý
+    let rawDbConfig: any = null;
+    try {
+      const { data } = await supabase
+        .from('viettel_config')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (data && data.length > 0) {
+        rawDbConfig = data[0];
+      }
+    } catch (dbErr) {
+      console.warn('[Service] Không thể tải cấu hình thô từ viettel_config cho backend:', dbErr);
+    }
+
     const response = await axios.post('/api/viettel/create-invoice', {
       serviceUrl: serviceUrl,
       taxCode: config.viettelSupplierTaxCode,
       token: token,
-      payload: payload
+      payload: payload,
+      dbConfig: rawDbConfig // Truyền config DB thô trực tiếp xuống server
     });
 
     const data = response.data;

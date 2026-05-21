@@ -4,15 +4,32 @@ import axios, { AxiosResponse } from 'axios';
  * ============================================================================
  * VIETTEL S-INVOICE INTEGRATION MODULE (TYPESCRIPT / NODE.JS)
  * ============================================================================
- * Vai trò: Senior Backend Developer chuyên trách tích hợp hệ thống.
+ * Vai trò: Senior Backend Developer chuyên trách tích hợp hệ thống hóa đơn điện tử.
  * Chức năng: Đóng gói dữ liệu DTO và thực hiện cuộc phát hành hóa đơn điện tử S-Invoice.
  * Thiết kế bảo mật: Xử lý Basic Authentication chuẩn hóa Base64 và transactionUuid ngẫu nhiên chống trùng.
+ * Khắc phục lỗi: Cơ chế Fallback Endpoints tự động khi bị lỗi 404 và chuẩn hóa api_url triệt để.
  * ============================================================================
  */
 
 // ============================================================================
-// 1. DATA TRANSFER OBJECT SECTIONS (HỆ THỐNG DTO CHUẨN HOÁ THEO PHÂN TÍCH TÀI LIỆU)
+// 1. DATA TRANFER OBJECT SECTIONS (HỆ THỐNG DTO CHUẨN HOÁ THEO PHÂN TÍCH TÀI LIỆU)
 // ============================================================================
+
+/**
+ * Cấu trúc ánh xạ trực tiếp bản ghi từ bảng viettel_config trong Supabase
+ */
+export interface ViettelConfigDB {
+  id?: string;
+  username?: string;
+  password?: string;
+  tax_code?: string;
+  app_id?: string;
+  api_url?: string;
+  is_sandbox?: boolean;
+  template_code?: string;
+  invoice_series?: string;
+  updated_at?: string | Date;
+}
 
 /**
  * Thông tin chung của hóa đơn điện tử (General Invoice Information)
@@ -355,7 +372,7 @@ export interface ViettelInvoiceResponseDTO {
 }
 
 // ============================================================================
-// 2. CORE BACKEND SERVICE CLASS IMPLEMENTATION
+// 2. CORE BACKEND SERVICE CLASS IMPLEMENTATION (LỚP XỬ LÝ CHÍNH CÓ FALLBACK URL)
 // ============================================================================
 
 export class ViettelSInvoiceBackendService {
@@ -366,7 +383,16 @@ export class ViettelSInvoiceBackendService {
    * @param originUrl URL cơ sở do Viettel cung cấp (Mặc định: 'https://api-vinvoice.viettel.vn')
    */
   constructor(originUrl: string = 'https://api-vinvoice.viettel.vn') {
-    this.baseUrl = originUrl.trim().replace(/\/+$/, '');
+    this.baseUrl = this.normalizeUrl(originUrl);
+  }
+
+  /**
+   * Hàm chuẩn hóa Url để loại bỏ hoàn toàn các dấu gạch chéo (/) dư thừa ở cuối chuỗi
+   * @param url Chuỗi URL cần chuẩn hóa
+   */
+  private normalizeUrl(url: string): string {
+    if (!url) return '';
+    return url.trim().replace(/\/+$/, '');
   }
 
   /**
@@ -375,6 +401,7 @@ export class ViettelSInvoiceBackendService {
    * @param password Mật khẩu tài khoản tích hợp API tương ứng
    * @param supplierTaxCode Mã số thuế người bán hàng. Ví dụ: '4000926165'
    * @param invoicePayload Toàn bộ dữ liệu hóa đơn gồm chi tiết mặt hàng và tổng tiền
+   * @param dbConfig Đối tượng cấu hình đầy đủ từ bảng viettel_config (Nếu có) để gán động thông tin
    */
   public async createInvoice(
     username: string,
@@ -383,92 +410,158 @@ export class ViettelSInvoiceBackendService {
     invoicePayload: Omit<ViettelInvoiceRequestDTO, 'generalInvoiceInfo'> & {
       // Cho phép cấu hình các trường nghiệp vụ linh hoạt của generalInvoiceInfo từ ngoài
       generalInvoiceInfo: Omit<GeneralInvoiceInfoDTO, 'transactionUuid'>;
-    }
+    },
+    dbConfig?: ViettelConfigDB
   ): Promise<ViettelInvoiceResponseDTO> {
     
-    // Bước 1: Bảo mật và định danh chống trùng lắp giao dịch (Chỉ thị số 4)
+    // Bước 1: Bảo mật và định danh chống trùng lắp giao dịch
     // Tạo mã UUID ngẫu nhiên v4 cho mỗi lần bấm gửi request hoá đơn
     const randomUuid = this.generateUUIDv4();
-    
+
+    // Xác định các trường cấu hình kết hợp động từ tham số hoặc từ dbConfig
+    let finalUsername = username ? username.trim() : '';
+    let finalPassword = password || '';
+    let finalTaxCode = supplierTaxCode ? supplierTaxCode.trim() : '';
+    let baseApiUrl = this.baseUrl;
+
+    // Chiết xuất cấu hình động từ viettel_config DB nếu được truyền vào
+    if (dbConfig) {
+      console.log('[SeniorBackend] Đang nạp cấu hình động từ bản ghi viettel_config DB...');
+      if (dbConfig.username) {
+        finalUsername = dbConfig.username.trim();
+        console.log(`[SeniorBackend] Cấu hình động -> username: ${finalUsername}`);
+      }
+      if (dbConfig.password) {
+        finalPassword = dbConfig.password;
+      }
+      if (dbConfig.tax_code) {
+        finalTaxCode = dbConfig.tax_code.trim();
+        console.log(`[SeniorBackend] Cấu hình động -> tax_code: ${finalTaxCode}`);
+      }
+      if (dbConfig.api_url) {
+        baseApiUrl = this.normalizeUrl(dbConfig.api_url);
+        console.log(`[SeniorBackend] Cấu hình động -> api_url: ${baseApiUrl}`);
+      }
+    }
+
+    // Gán động templateCode và invoiceSeries từ dbConfig nếu có, nếu không giữ của payload gốc
+    const targetTemplateCode = dbConfig?.template_code ? dbConfig.template_code.trim() : invoicePayload.generalInvoiceInfo.templateCode;
+    const targetInvoiceSeries = dbConfig?.invoice_series ? dbConfig.invoice_series.trim() : invoicePayload.generalInvoiceInfo.invoiceSeries;
+
     const finalPayload: ViettelInvoiceRequestDTO = {
       ...invoicePayload,
       generalInvoiceInfo: {
         ...invoicePayload.generalInvoiceInfo,
-        transactionUuid: randomUuid, // Ép buộc ghi nhận transactionUuid phòng ngừa lỗi chồng hoá đơn khi rớt mạng
+        templateCode: targetTemplateCode,
+        invoiceSeries: targetInvoiceSeries,
+        transactionUuid: randomUuid, // Ép buộc ghi nhận transactionUuid phòng ngừa lỗi trùng hoá đơn khi rớt mạng
         invoiceIssuedDate: invoicePayload.generalInvoiceInfo.invoiceIssuedDate || Date.now() // Lấy giờ thực tại nếu chưa truyền dữ liệu
       }
     };
 
-    // Thiết lập đường dẫn API tạo hóa đơn tương ứng MST nhà bán theo tài liệu trang 36
-    const endpointUrl = `${this.baseUrl}/InvoiceAPI/InvoiceWS/createInvoice/${supplierTaxCode.trim()}`;
+    console.log(`[SeniorBackend] Dữ liệu Invoice gán động thành công: Mẫu hóa đơn = ${targetTemplateCode}, Ký hiệu = ${targetInvoiceSeries}`);
 
     // Bước 2: Mã hóa token xác thực bằng cơ chế Basic Authentication
-    // Chuỗi mẫu: 4000926165:Mật_Khẩu -> Base64
-    const loginString = `${username.trim()}:${password}`;
+    const loginString = `${finalUsername}:${finalPassword}`;
     const base64AuthToken = typeof Buffer !== 'undefined'
       ? Buffer.from(loginString).toString('base64')
       : btoa(unescape(encodeURIComponent(loginString)));
 
-    console.log(`[SeniorBackend] Bắt đầu gọi API S-Invoice Viettel tạo hoá đơn: ${endpointUrl}`);
-    console.log(`[SeniorBackend] Sử dụng transactionUuid chống trùng duy nhất: ${randomUuid}`);
+    // Bước 3: Thiết lập danh sách các Endpoint Fallback để chống lỗi 404
+    const endpoints = [
+      `${baseApiUrl}/InvoiceAPI/InvoiceWS/createInvoice/${finalTaxCode}`,         // Endpoint 1: Mặc định tài liệu cũ
+      `${baseApiUrl}/InvoiceWS/createInvoice/${finalTaxCode}`,                    // Endpoint 2: Bỏ InvoiceAPI
+      `${baseApiUrl}/services/InvoiceWS/createInvoice/${finalTaxCode}`             // Endpoint 3: Phân hệ Services mới nhất (vInvoice)
+    ];
 
-    try {
-      // Thực thi gửi gói POST đồng bộ lên máy chủ S-Invoice
-      const response: AxiosResponse<any> = await axios.post(
-        endpointUrl,
-        finalPayload,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Basic ${base64AuthToken}` // Truyền Base64 Xác thực Basic Auth
-          },
-          // Đặt mức thời gian chờ tối thiểu từ 60 - 90 giây để bù đắp xử lý chữ ký điện tử HSM từ Viettel (mục 6.2)
-          timeout: 75000,
-          validateStatus: () => true // Cho phép đọc sâu các phản hồi trả về mã Http thất bại tự điều chỉnh
+    console.log(`[SeniorBackend] Danh sách url S-Invoice Viettel sẽ được thử nghiệm tuần tự:`);
+    endpoints.forEach((ep, idx) => console.log(` - Endpoint $[${idx + 1}]: ${ep}`));
+
+    let lastError: any = null;
+    let finalResponse: AxiosResponse<any> | null = null;
+
+    // Vòng lặp tự động thử lại URL (Fallback Loop) nhằm rà quét endpoint thích hợp
+    for (let i = 0; i < endpoints.length; i++) {
+      const endpointUrl = endpoints[i];
+      console.log(`\n[SeniorBackend] >>> Bắt đầu kích hoạt axios.post đến (Lần thử ${i + 1}/${endpoints.length}): ${endpointUrl}`);
+      console.log(`[SeniorBackend] Gửi kèm UUID chống trùng: ${randomUuid}`);
+
+      try {
+        const response: AxiosResponse<any> = await axios.post(
+          endpointUrl,
+          finalPayload,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': `Basic ${base64AuthToken}` 
+            },
+            // Cấu hình thời gian timeout tối thiểu 75000 (75 giây) chờ thiết bị HSM của Viettel ký số
+            timeout: 75000,
+            validateStatus: () => true // Cho phép tự đọc sâu status, tránh axios tự quăng Exception lỗi HTTP
+          }
+        );
+
+        console.log(`[SeniorBackend] Kết quả phản hồi từ Viettel: HTTP Status = ${response.status}`);
+
+        // Nếu cổng trả về 404 (Not Found), tiếp tục thử nghiệm sang endpoint tiếp theo
+        if (response.status === 404) {
+          console.warn(`[SeniorBackend] Cổng ${endpointUrl} trả về lỗi 404 rỗng, tự động chuyển sang fallback endpoint tiếp theo...`);
+          lastError = new Error(`Lỗi HTTP 404 (Không Tìm Thấy) tại đường dẫn ${endpointUrl}`);
+          continue;
         }
+
+        // Nếu nhận phản hồi hợp lệ (bất kể thành công hay bị từ chối nghiệp vụ khác 404), thì ghi nhận phản hồi và ngắt vòng lặp
+        finalResponse = response;
+        break;
+
+      } catch (e: any) {
+        console.error(`[SeniorBackend] Lỗi rớt mạng hoặc kết nối timeout tại ${endpointUrl}:`, e.message);
+        lastError = e;
+        console.warn(`[SeniorBackend] Đang chuyển sang thử endpoint kế tiếp...`);
+      }
+    }
+
+    // Nếu sau tất cả các lần thử mà không nhận được phản hồi ổn định nào khác 404
+    if (!finalResponse) {
+      throw new Error(
+        `Tất cả các cổng kết nối Viettel S-Invoice đều trả về 404 hoặc bị thất bại mạng. Lỗi cuối cùng ghi nhận: ${lastError?.message || 'Không có phản hồi'}`
       );
+    }
 
-      const responseData = response.data;
-      console.log(`[SeniorBackend] Hệ thống Viettel phản hồi, Http Status: ${response.status}`);
-      console.log(`[SeniorBackend] Chi tiết Data:`, JSON.stringify(responseData));
+    // Bước 4: Phân loại dữ liệu phản hồi nhận được
+    const responseData = finalResponse.data;
+    console.log(`[SeniorBackend] Đọc dữ liệu thành công từ cổng được chấp thuận.`);
+    console.log(`[SeniorBackend] Chi tiết phản hồi S-Invoice:`, JSON.stringify(responseData));
 
-      // Bước 3: Đọc hiểu và phân tích dữ liệu phản hồi (Response)
-      if (response.status >= 200 && response.status < 300) {
-        
-        // Hệ thống Viettel trả thành công: errorCode rỗng,null,0 và có đầy đủ invoiceNo trong result
-        const isSuccess = !responseData.errorCode || 
-                          responseData.errorCode === '' || 
-                          responseData.errorCode === '0' ||
-                          responseData.errorCode === 'SUCCESS';
+    if (finalResponse.status >= 200 && finalResponse.status < 300) {
+      const isSuccess = !responseData.errorCode || 
+                        responseData.errorCode === '' || 
+                        responseData.errorCode === '0' ||
+                        responseData.errorCode === 'SUCCESS';
 
-        if (isSuccess && responseData.result) {
-          console.log(`[SeniorBackend] Phát hành S-Invoice thành công! Số hoá đơn: ${responseData.result.invoiceNo}`);
-          return {
-            errorCode: null,
-            description: 'Phát hành hoá đơn điện tử thành công từ Viettel S-Invoice',
-            result: responseData.result
-          };
-        }
-
-        // Trường hợp Viettel phản hồi mã thành công HTTP 200 nhưng cấu trúc dữ liệu bị từ chối nghiệp vụ thuế
-        const errCode = responseData.errorCode || 'VIETTEL_BUSINESS_ERROR';
-        const errDesc = responseData.description || 'Nghiệp vụ hóa đơn bị Viettel từ chối mà không có lý do hoàn trả.';
-        
-        this.handleViettelBusinessError(errCode, errDesc);
+      if (isSuccess && responseData.result) {
+        console.log(`[SeniorBackend] Xuất hóa đơn S-Invoice Viettel THÀNH CÔNG! Số hóa đơn: ${responseData.result.invoiceNo}`);
+        return {
+          errorCode: null,
+          description: 'Phát hành hoá đơn điện tử thành công từ Viettel S-Invoice',
+          result: responseData.result
+        };
       }
 
-      // Xử lý khi HTTP Status bên Viettel ngoài luồng 200 (ví dụ 400 Bad Request, 401 Unauthorized, 404 Not Found, 500 Server Error)
-      throw new Error(
-        `Lỗi HTTP từ cổng dịch vụ Viettel [Mã: ${response.status}]. Chi tiết phản hồi: ${
-          typeof responseData === 'object' ? JSON.stringify(responseData) : responseData
-        }`
-      );
-
-    } catch (e: any) {
-      console.error(`[SeniorBackend] Gặp lỗi nghiêm trọng trong quá trình phát hành S-Invoice:`, e.message);
-      throw e;
+      // Trường hợp Viettel phản hồi mã thành công HTTP 200 nhưng cấu trúc dữ liệu bị từ chối nghiệp vụ thuế
+      const errCode = responseData.errorCode || 'VIETTEL_BUSINESS_ERROR';
+      const errDesc = responseData.description || 'Nghiệp vụ hóa đơn bị Viettel từ chối mà không có lý do hoàn trả.';
+      
+      this.handleViettelBusinessError(errCode, errDesc);
     }
+
+    // Xử lý khi HTTP Status bên Viettel ngoài luồng 20x (Ví dụ: 400 Bad Request, 401 Unauthorized, 500 Server Error)
+    throw new Error(
+      `Lỗi nghiệp vụ hệ thống từ cổng dịch vụ Viettel [Mã HTTP: ${finalResponse.status}]. Chi tiết phản hồi: ${
+        typeof responseData === 'object' ? JSON.stringify(responseData) : responseData
+      }`
+    );
   }
 
   /**
@@ -506,7 +599,7 @@ export class ViettelSInvoiceBackendService {
   }
 
   /**
-   * Hàm tự chế hỗ trợ tự sinh ngẫu nhiên định danh Transaction UUID v4
+   * Hàm tự chế hỗ trợ tự sinh ngẫu nhiên định danh Transaction UUID v4 để ngăn ngừa trùng hóa đơn
    */
   private generateUUIDv4(): string {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
