@@ -7,12 +7,13 @@ import axios, { AxiosResponse } from 'axios';
  * Vai trò: Senior Backend Developer chuyên trách tích hợp hệ thống hóa đơn điện tử.
  * Chức năng: Đóng gói dữ liệu DTO và thực hiện cuộc phát hành hóa đơn điện tử S-Invoice.
  * Thiết kế bảo mật: Xử lý Basic Authentication chuẩn hóa Base64 và transactionUuid ngẫu nhiên chống trùng.
- * Khắc phục lỗi: Cơ chế Fallback Endpoints tự động khi bị lỗi 404 và chuẩn hóa api_url triệt để.
+ * Khắc phục lỗi: Xóa bỏ hoàn toàn cụm từ /InvoiceAPI để không bị lỗi 404 trên các môi trường thực tế,
+ * tích hợp chế độ chuẩn hóa gạch chéo URL cực kỳ an toàn.
  * ============================================================================
  */
 
 // ============================================================================
-// 1. DATA TRANFER OBJECT SECTIONS (HỆ THỐNG DTO CHUẨN HOÁ THEO PHÂN TÍCH TÀI LIỆU)
+// 1. DATA TRANSFER OBJECT SECTIONS (HỆ THỐNG DTO CHUẨN HOÁ THEO PHÂN TÍCH TÀI LIỆU)
 // ============================================================================
 
 /**
@@ -396,7 +397,63 @@ export class ViettelSInvoiceBackendService {
   }
 
   /**
-   * Thực hiện gọi API đồng bộ để khởi tạo và phát hành hóa đơn điện tử S-Invoice của doanh nghiệp
+   * Phương thức bọc (Wrapper) nhận vào dữ liệu hóa đơn (Omit trường generalInvoiceInfo) và tự động
+   * lấy templateCode và invoiceSeries từ bảng cấu hình viettel_config DB để đóng gói đầy đủ payload gửi đi
+   */
+  public async createInvoiceWithConfigWrapper(
+    username: string,
+    password: string,
+    supplierTaxCode: string,
+    invoicePayload: Omit<ViettelInvoiceRequestDTO, 'generalInvoiceInfo'> & {
+      generalInvoiceInfo?: Partial<Omit<GeneralInvoiceInfoDTO, 'transactionUuid'>>;
+    },
+    dbConfig: ViettelConfigDB
+  ): Promise<ViettelInvoiceResponseDTO> {
+    console.log('[Wrapper] Đang chạy Wrapper tự động gán dữ liệu từ bảng viettel_config...');
+
+    const templateCode = dbConfig.template_code ? dbConfig.template_code.trim() : '';
+    const invoiceSeries = dbConfig.invoice_series ? dbConfig.invoice_series.trim() : '';
+
+    if (!templateCode) {
+      console.warn('[Wrapper] Cảnh báo: template_code rỗng trong bảng cấu hình viettel_config');
+    }
+    if (!invoiceSeries) {
+      console.warn('[Wrapper] Cảnh báo: invoice_series rỗng trong bảng cấu hình viettel_config');
+    }
+
+    const defaultGeneralInfo: GeneralInvoiceInfoDTO = {
+      invoiceType: '1',
+      templateCode: templateCode,
+      invoiceSeries: invoiceSeries,
+      adjustmentType: '1',
+      paymentStatus: true,
+      transactionUuid: '', // Sẽ được tự động phát sinh UUID v4 an toàn trong đại lý chính
+      currencyCode: 'VND',
+      cusGetInvoiceRight: true
+    };
+
+    // Chuẩn bị payload hoàn thiện bao gồm generalInvoiceInfo
+    const reassembledPayload: ViettelInvoiceRequestDTO = {
+      ...invoicePayload,
+      generalInvoiceInfo: {
+        ...defaultGeneralInfo,
+        ...(invoicePayload.generalInvoiceInfo || {}),
+        templateCode: templateCode || (invoicePayload.generalInvoiceInfo?.templateCode || ''),
+        invoiceSeries: invoiceSeries || (invoicePayload.generalInvoiceInfo?.invoiceSeries || '')
+      } as GeneralInvoiceInfoDTO
+    };
+
+    return this.createInvoice(
+      username,
+      password,
+      supplierTaxCode,
+      reassembledPayload,
+      dbConfig
+    );
+  }
+
+  /**
+   * Thực hiện gọi API trực tiếp để khởi tạo và phát hành hóa đơn điện tử S-Invoice của doanh nghiệp
    * @param username Tài khoản doanh nghiệp cấu hình (MST). Ví dụ: '4000926165'
    * @param password Mật khẩu tài khoản tích hợp API tương ứng
    * @param supplierTaxCode Mã số thuế người bán hàng. Ví dụ: '4000926165'
@@ -467,14 +524,14 @@ export class ViettelSInvoiceBackendService {
       ? Buffer.from(loginString).toString('base64')
       : btoa(unescape(encodeURIComponent(loginString)));
 
-    // Bước 3: Thiết lập danh sách các Endpoint Fallback để chống lỗi 404
+    // Bước 3: Thiết lập danh sách các Endpoint Fallback đảm bảo không chèn cụm từ '/InvoiceAPI' gây lỗi 404
+    // Chuẩn vInvoice mới (Thông tư 78) quy định tuyệt đối không được chèn `/InvoiceAPI` ở giữa.
     const endpoints = [
-      `${baseApiUrl}/InvoiceAPI/InvoiceWS/createInvoice/${finalTaxCode}`,         // Endpoint 1: Mặc định tài liệu cũ
-      `${baseApiUrl}/InvoiceWS/createInvoice/${finalTaxCode}`,                    // Endpoint 2: Bỏ InvoiceAPI
-      `${baseApiUrl}/services/InvoiceWS/createInvoice/${finalTaxCode}`             // Endpoint 3: Phân hệ Services mới nhất (vInvoice)
+      `${baseApiUrl}/InvoiceWS/createInvoice/${finalTaxCode}`,                    // Endpoint 1: Chuẩn vInvoice (Thông tư 78) chính thức
+      `${baseApiUrl}/services/InvoiceWS/createInvoice/${finalTaxCode}`             // Endpoint 2: Cổng phân hệ Services hỗ trợ mới nhất
     ];
 
-    console.log(`[SeniorBackend] Danh sách url S-Invoice Viettel sẽ được thử nghiệm tuần tự:`);
+    console.log(`[SeniorBackend] Danh sách url S-Invoice Viettel chuẩn Thông tư 78 sẽ được thử nghiệm tuần tự (Tuyệt đối không sử dụng /InvoiceAPI):`);
     endpoints.forEach((ep, idx) => console.log(` - Endpoint $[${idx + 1}]: ${ep}`));
 
     let lastError: any = null;
@@ -483,7 +540,9 @@ export class ViettelSInvoiceBackendService {
     // Vòng lặp tự động thử lại URL (Fallback Loop) nhằm rà quét endpoint thích hợp
     for (let i = 0; i < endpoints.length; i++) {
       const endpointUrl = endpoints[i];
-      console.log(`\n[SeniorBackend] >>> Bắt đầu kích hoạt axios.post đến (Lần thử ${i + 1}/${endpoints.length}): ${endpointUrl}`);
+      
+      // IN LOG CHÍNH XÁC THEO YÊU CẦU ĐỂ DỄ DÀNG GIÁM SÁT HỆ THỐNG
+      console.log("URL gọi thực tế:", endpointUrl);
       console.log(`[SeniorBackend] Gửi kèm UUID chống trùng: ${randomUuid}`);
 
       try {
