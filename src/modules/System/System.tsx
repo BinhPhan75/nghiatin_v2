@@ -27,7 +27,15 @@ const System: React.FC = () => {
   
   // Data State
   const [products, setProducts] = useState<Product[]>([]);
-  const [config, setConfig] = useState<SystemConfig | null>(null);
+  const [config, setConfig] = useState<SystemConfig | null>(() => {
+    try {
+      const cached = localStorage.getItem('cached_system_config');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {
+      console.warn("Error parsing cached system_config in System.tsx:", e);
+    }
+    return null;
+  });
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [editingPrices, setEditingPrices] = useState<Record<string, { buy_price: number; sell_price: number }>>({});
@@ -42,15 +50,23 @@ const System: React.FC = () => {
   const [dbStatus, setDbStatus] = useState<{ loading: boolean; connected: boolean; message: string }>({ 
     loading: false, connected: false, message: 'Chưa thực hiện kiểm tra' 
   });
-  const [viettelEinvoiceConfig, setViettelEinvoiceConfig] = useState<any>({
-    viettelAuthUrl: 'https://api-vinvoice.viettel.vn/auth/login',
-    viettelServiceUrl: 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api',
-    viettelUsername: '',
-    viettelPassword: '',
-    viettelSupplierTaxCode: '',
-    viettelTemplateCode: '',
-    viettelInvoiceSeries: '',
-    viettelEnabled: false
+  const [viettelEinvoiceConfig, setViettelEinvoiceConfig] = useState<any>(() => {
+    try {
+      const cached = localStorage.getItem('cached_viettel_config');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {
+      console.warn("Error parsing cached viettel_config in System.tsx:", e);
+    }
+    return {
+      viettelAuthUrl: 'https://api-vinvoice.viettel.vn/auth/login',
+      viettelServiceUrl: 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api',
+      viettelUsername: '',
+      viettelPassword: '',
+      viettelSupplierTaxCode: '',
+      viettelTemplateCode: '',
+      viettelInvoiceSeries: '',
+      viettelEnabled: false
+    };
   });
   const [savingViettel, setSavingViettel] = useState(false);
   const [savingBank, setSavingBank] = useState(false);
@@ -131,6 +147,11 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
       if (sysData && sysData.length > 0) {
         console.log("[System] System config loaded:", sysData[0].id);
         setConfig(sysData[0]);
+        try {
+          localStorage.setItem('cached_system_config', JSON.stringify(sysData[0]));
+        } catch (e) {
+          console.warn("Error caching system_config:", e);
+        }
       } else {
         console.log("[System] No system config found, using default");
         setConfig({
@@ -173,7 +194,7 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
         // Extract from json field if exists for more flexibility, else from columns
         const jsonCfg = vData.viettel_einvoice_config || {};
         
-        setViettelEinvoiceConfig({
+        const freshViettelEinvoice = {
           viettelAuthUrl: vData.auth_url || jsonCfg.viettelAuthUrl || 'https://api-vinvoice.viettel.vn/auth/login',
           viettelServiceUrl: vData.api_url || jsonCfg.viettelServiceUrl || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api',
           viettelUsername: vData.username || vData.app_id || '',
@@ -182,15 +203,30 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
           viettelTemplateCode: vData.template_code || '',
           viettelInvoiceSeries: vData.invoice_series || '',
           viettelEnabled: vData.is_sandbox === false
-        });
+        };
+        setViettelEinvoiceConfig(freshViettelEinvoice);
+        try {
+          localStorage.setItem('cached_viettel_config', JSON.stringify(freshViettelEinvoice));
+        } catch (e) {
+          console.warn("Error caching viettel_config:", e);
+        }
       } else {
         console.log("[System] No Viettel config found in viettel_config table");
       }
     } catch (error: any) {
       console.error("Error fetching configs:", error);
+      
+      const hasCachedSys = !!localStorage.getItem('cached_system_config');
+      const hasCachedV = !!localStorage.getItem('cached_viettel_config');
+      
+      let errorMsgToShow = error.message || 'Lỗi không xác định khi tải cấu hình';
+      if (hasCachedSys || hasCachedV) {
+        errorMsgToShow += " (Do cơ sở dữ liệu Supabase đang trong trạng thái khởi động nguội hoặc phản hồi chậm, hệ thống đã tự động kích hoạt Cấu hình Lưu trữ Cục bộ có sẵn để đảm bảo giao dịch không bị gián đoạn. Bạn vẫn có thể thực hiện giao dịch và quản lý bình thường!)";
+      }
+
       setLastError({
         source: 'fetchConfigs_catch',
-        message: error.message || 'Lỗi không xác định khi tải cấu hình',
+        message: errorMsgToShow,
         stack: error.stack
       });
     } finally {
@@ -633,13 +669,27 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
               )}
               {lastError.code && <p className="text-neutral-500 mt-2">Mã lỗi hệ thống: {lastError.code}</p>}
             </div>
-            <div className="bg-white/10 p-4 rounded text-red-100">
-              <p className="font-bold mb-2 uppercase text-[10px] tracking-widest">Hướng dẫn khắc phục:</p>
-              <ul className="list-disc ml-4 space-y-1">
-                <li>Bước 1: Kiểm tra kết nối Internet và đảm bảo VPN đã tắt (nếu có).</li>
-                <li>Bước 2: Xác nhận quyền truy cập của tài khoản <strong>{currentUserEmail}</strong>.</li>
-                <li>Bước 3: Tải lại trang (F5). Nếu lỗi vẫn còn, hãy chụp màn hình gửi kỹ thuật.</li>
-              </ul>
+            <div className="bg-white/10 p-4 rounded text-red-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <p className="font-bold mb-2 uppercase text-[10px] tracking-widest">Hướng dẫn khắc phục:</p>
+                <ul className="list-disc ml-4 space-y-1 text-[11px]">
+                  <li>Bước 1: Nhấp nút <strong>THỬ LẠI KẾT NỐI</strong> bên cạnh để gọi lại Supabase.</li>
+                  <li>Bước 2: Kiểm tra kết nối Internet và tắt phần mềm chặn quảng cáo / chặn tracker / VPN.</li>
+                  <li>Bước 3: Xác nhận quyền truy cập của tài khoản <strong>{currentUserEmail}</strong>.</li>
+                </ul>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setLastError(null);
+                  fetchProducts();
+                  fetchConfigs();
+                  fetchBanks();
+                }}
+                className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-black font-black uppercase text-[10px] tracking-widest px-5 py-3 rounded-sm transition-all focus:outline-none focus:ring-2 focus:ring-amber-300 shadow-md self-start md:self-auto shrink-0"
+              >
+                <Clock size={14} className="animate-pulse" /> Thử lại kết nối (Retry)
+              </button>
             </div>
           </div>
           <button onClick={() => setLastError(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors ml-4 focus:outline-none shrink-0 outline-none border-none">

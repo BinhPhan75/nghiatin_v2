@@ -18,7 +18,15 @@ const Transactions: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [config, setConfig] = useState<SystemConfig | null>(null);
+  const [config, setConfig] = useState<SystemConfig | null>(() => {
+    try {
+      const cached = localStorage.getItem('cached_system_config');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {
+      console.warn("Error parsing cached system_config:", e);
+    }
+    return null;
+  });
   
   // Form State
   const [customerName, setCustomerName] = useState('');
@@ -173,8 +181,19 @@ const Transactions: React.FC = () => {
   };
 
   const fetchConfig = async () => {
-    const { data } = await supabase.from('system_config').select('*').limit(1);
-    if (data && data.length > 0) setConfig(data[0]);
+    try {
+      const { data } = await supabase.from('system_config').select('*').limit(1);
+      if (data && data.length > 0) {
+        setConfig(data[0]);
+        try {
+          localStorage.setItem('cached_system_config', JSON.stringify(data[0]));
+        } catch (e) {
+          console.warn("Error setting cached_system_config in localStorage:", e);
+        }
+      }
+    } catch (err) {
+      console.warn("fetchConfig error, using cached standard values:", err);
+    }
   };
 
   const fetchBanks = async () => {
