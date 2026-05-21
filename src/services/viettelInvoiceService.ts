@@ -47,13 +47,21 @@ export async function getViettelAccessToken(config: ViettelConfig): Promise<stri
     const response = await axios.post('/api/viettel/token', {
       username: config.viettelUsername,
       password: config.viettelPassword,
-      authUrl: authUrl
+      authUrl: authUrl,
+      taxCode: config.viettelSupplierTaxCode
     });
+
+    if (response.data && typeof response.data === 'string' && (response.data.includes('<!DOCTYPE html>') || response.data.includes('<html'))) {
+      throw new Error('Môi trường tĩnh (Vercel) không hỗ trợ chạy Backend Express Proxy Server. Bạn phải mở và chạy ứng dụng thông qua đường dẫn AI Studio Cloud Run (hoặc máy chủ Node.js có tích hợp server.ts) để chạy các API hóa đơn điện tử.');
+    }
 
     if (response.data && response.data.access_token) {
       return response.data.access_token;
     }
   } catch (error: any) {
+    if (error.response?.status === 404) {
+      throw new Error('Đường dẫn API backend /api/viettel/token không tồn tại (Lỗi 404). Các tính năng kết nối Viettel yêu cầu máy chủ Express backend hoạt động. Nếu đang chạy trên Vercel tĩnh, vui lòng chuyển sang đường dẫn AI Studio Cloud Run.');
+    }
     const errorData = error.response?.data;
     const errorMsg = errorData?.details || errorData?.message || errorData?.error || error.message;
     console.error(`[Service] Server-side token fetch failed:`, errorMsg);

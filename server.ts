@@ -278,7 +278,7 @@ async function startServer() {
 
   // Dedicated Viettel Token Route updated for v2.49 (JSON login)
   app.post('/api/viettel/token', async (req, res) => {
-    const { username, password, authUrl } = req.body;
+    const { username, password, authUrl, taxCode } = req.body;
     
     // Normalize user entered login API path
     const primaryUrl = normalizeAuthUrl(authUrl);
@@ -309,7 +309,7 @@ async function startServer() {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                timeout: 30000,
+                timeout: 8000, // Faster failure loop (8 seconds instead of 30)
                 validateStatus: () => true
             });
             
@@ -334,15 +334,16 @@ async function startServer() {
     // --- BEGIN FALLBACK FOR PURE BASIC AUTH SYSTEMS (PROD S-INVOICE) ---
     // If standard token endpoints returned 404 (common on production S-Invoice which uses direct Basic Authentication instead of JSON token servers),
     // we verify the credentials directly by querying the getCustomFields API using Basic Authentication.
-    const isMismatchedOrNotFound = !lastResponse || lastResponse.status === 404;
+    const isMismatchedOrNotFound = !lastResponse || lastResponse.status === 404 || lastResponse.status === 502 || lastResponse.status === 504;
+    const targetTaxCode = taxCode || username;
     
-    if (isMismatchedOrNotFound && username && password) {
+    if (isMismatchedOrNotFound && username && password && targetTaxCode) {
       try {
         const parsed = new URL(primaryUrl);
         const origin = parsed.origin;
-        const testEndpoint = `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${encodeURIComponent(username)}&templateCode=1`;
+        const testEndpoint = `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${encodeURIComponent(targetTaxCode.trim())}&templateCode=1`;
         
-        console.log(`[Viettel Token Fallback] Login endpoint returned 404. Testing direct S-Invoice metadata API with Basic Auth: ${testEndpoint}`);
+        console.log(`[Viettel Token Fallback] Testing direct S-Invoice metadata API with Basic Auth: ${testEndpoint}`);
         
         const loginStr = `${username.trim()}:${password}`;
         const base64AuthToken = Buffer.from(loginStr).toString('base64');
@@ -352,7 +353,7 @@ async function startServer() {
             'Authorization': `Basic ${base64AuthToken}`,
             'Accept': 'application/json'
           },
-          timeout: 25000,
+          timeout: 10000, // Faster failure (10 seconds instead of 25)
           validateStatus: () => true
         });
         
@@ -383,7 +384,7 @@ async function startServer() {
         });
     }
 
-    res.status(500).json({ error: 'Viettel Auth Error', message: 'All login endpoints failed or timed out' });
+    res.status(500).json({ error: 'Viettel Auth Error', message: 'Tất cả các cổng kết nối Viettel S-Invoice đều thất bại hoặc hết thời gian phản hồi (timed out).' });
   });
 
   // Dedicated Viettel Create Invoice Route updated for v2.49 (Basic auth)

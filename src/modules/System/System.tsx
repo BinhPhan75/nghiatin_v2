@@ -89,6 +89,13 @@ const System: React.FC = () => {
     }
   };
 
+const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise<any> => {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<any>((_, reject) => setTimeout(() => reject(new Error(errorMsg)), timeoutMs))
+  ]);
+};
+
   const fetchProducts = async () => {
     const { data: snapshot } = await supabase.from('products').select('*').order('name');
     if (snapshot) {
@@ -106,7 +113,11 @@ const System: React.FC = () => {
     try {
       console.log("[System] Fetching configs...");
       // 1. Fetch system general config (Bank info)
-      const { data: sysData, error: sysError } = await supabase.from('system_config').select('*').limit(1);
+      const { data: sysData, error: sysError } = await withTimeout(
+        supabase.from('system_config').select('*').limit(1),
+        8000,
+        "Không thể tải cấu hình chung từ cơ sở dữ liệu Supabase (Hết hạn truy vấn 8 giây)."
+      );
       if (sysError) {
         console.error("Lỗi khi tải cấu hình hệ thống:", sysError);
         setLastError({
@@ -132,11 +143,15 @@ const System: React.FC = () => {
       }
 
       // 2. Fetch Viettel dedicated config - Order by latest updated
-      const { data: vDataList, error: vError } = await supabase
-        .from('viettel_config')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(1);
+      const { data: vDataList, error: vError } = await withTimeout(
+        supabase
+          .from('viettel_config')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1),
+        8000,
+        "Không thể tải cấu hình Viettel từ cơ sở dữ liệu Supabase (Hết hạn kết nối 8 giây)."
+      );
         
       if (vError) {
         console.error("Lỗi khi tải cấu hình Viettel:", vError);
@@ -375,7 +390,11 @@ const System: React.FC = () => {
       console.log("[System] Starting save Viettel config process...");
       
       // 1. Fetch existing first to get the correct ID if possible
-      const { data: existing } = await supabase.from('viettel_config').select('id').limit(1);
+      const { data: existing } = await withTimeout(
+        supabase.from('viettel_config').select('id').limit(1),
+        8000,
+        "Hết hạn kết nối kiểm tra dữ liệu lưu cấu hình từ bảng viettel_config (8 giây)."
+      );
       const targetId = existing && existing.length > 0 ? existing[0].id : '00000000-0000-0000-0000-000000000000';
 
       // 2. Upsert to dedicated viettel_config table
@@ -394,9 +413,13 @@ const System: React.FC = () => {
       };
       
       console.log("[System] Upserting to viettel_config table with ID:", targetId);
-      const { error: error1 } = await supabase
-        .from('viettel_config')
-        .upsert(viettelPayload);
+      const { error: error1 } = await withTimeout(
+        supabase
+          .from('viettel_config')
+          .upsert(viettelPayload),
+        8000,
+        "Hết hạn kết nối lưu thông tin vào bảng viettel_config (8 giây)."
+      );
 
       if (error1) {
         console.error("[System] Viettel config upsert error:", error1);
@@ -445,11 +468,15 @@ const System: React.FC = () => {
       console.log("[System] Testing Viettel connection directly from saved `viettel_config` table...");
       
       // 1. Fetch the latest configuration row from viettel_config table
-      const { data: vDataList, error: vError } = await supabase
-        .from('viettel_config')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(1);
+      const { data: vDataList, error: vError } = await withTimeout(
+        supabase
+          .from('viettel_config')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1),
+        8000,
+        "Không thể tải cấu hình lưu trữ từ bảng viettel_config (Hết hạn kết nối Supabase 8 giây)."
+      );
         
       if (vError) {
         throw new Error("Lỗi tải thông tin từ bảng viettel_config: " + vError.message);
@@ -1012,6 +1039,23 @@ const System: React.FC = () => {
               <ShieldCheck className="text-gold-primary" />
               <h3 className="text-xl uppercase font-black tracking-tight">Hóa đơn điện tử Viettel (vInvoice)</h3>
             </div>
+
+            {window.location.hostname.includes('vercel.app') && (
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-sm text-xs space-y-1.5 text-amber-900 animate-fade-in mb-2 shadow-sm">
+                <p className="font-black uppercase tracking-wider flex items-center gap-1.5 text-[10px] text-amber-700">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                  ⚠️ Cảnh báo môi trường chạy (Vercel)
+                </p>
+                <div className="font-medium text-amber-800 leading-relaxed">
+                  Bạn đang truy cập ứng dụng từ tên miền <strong>{window.location.hostname}</strong>. 
+                  Môi trường Vercel tĩnh <strong>không có máy chủ Express Backend hoạt động</strong> để proxy kết nối Viettel. 
+                  Các tính năng kiểm tra kết nối và xuất hóa đơn sẽ báo lỗi hoặc không phản hồi (404/CORS) khi thử ở đây.
+                </div>
+                <div className="text-[11px] text-amber-700 font-bold">
+                  ➡️ Vui lòng nhấn vào nút "Hỏi Gemini" trong AI Studio hoặc sử dụng đúng đường dẫn Cloud Run của bạn để chạy đầy đủ chức năng!
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleUpdateViettelEinvoiceConfig} className="bg-neutral-50 p-8 border border-neutral-100 rounded-sm space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
