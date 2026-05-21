@@ -439,10 +439,40 @@ const System: React.FC = () => {
     setTestingViettel(true);
     setLastError(null);
     try {
-      console.log("[System] Testing Viettel connection with v2.49 API logic...");
-      const token = await getViettelAccessToken(viettelEinvoiceConfig);
+      console.log("[System] Testing Viettel connection directly from saved `viettel_config` table...");
+      
+      // 1. Fetch the latest configuration row from viettel_config table
+      const { data: vDataList, error: vError } = await supabase
+        .from('viettel_config')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+        
+      if (vError) {
+        throw new Error("Lỗi tải thông tin từ bảng viettel_config: " + vError.message);
+      }
+      
+      if (!vDataList || vDataList.length === 0) {
+        throw new Error("Không tìm thấy cấu hình hóa đơn điện tử Viettel nào được lưu trong bảng viettel_config! Vui lòng lưu cấu hình trước khi kiểm tra.");
+      }
+
+      const vData = vDataList[0];
+      const jsonCfg = vData.viettel_einvoice_config || {};
+      const configToTest = {
+        viettelAuthUrl: vData.auth_url || jsonCfg.viettelAuthUrl || 'https://api-vinvoice.viettel.vn/auth/login',
+        viettelServiceUrl: vData.api_url || jsonCfg.viettelServiceUrl || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api',
+        viettelUsername: vData.username || vData.app_id || '',
+        viettelPassword: vData.password || '',
+        viettelSupplierTaxCode: vData.tax_code || '',
+        viettelTemplateCode: vData.template_code || '',
+        viettelInvoiceSeries: vData.invoice_series || '',
+        viettelEnabled: vData.is_sandbox === false
+      };
+
+      console.log("[System] Testing connection using configuration with username:", configToTest.viettelUsername);
+      const token = await getViettelAccessToken(configToTest);
       if (token) {
-        alert("✅ Kết nối Viettel thành công!\n\nĐã lấy được Access Token: " + token.substring(0, 30) + "...");
+        alert("✅ Kết nối Viettel thành công!\n\nThông tin cấu hình lưu trong bảng `viettel_config` là CHÍNH XÁC. Đã lấy được Access Token thành công!");
       }
     } catch (error: any) {
       console.error("[System] Viettel Connection Test Failed:", error);
