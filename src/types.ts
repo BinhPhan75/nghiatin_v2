@@ -51,7 +51,7 @@ export interface Transaction {
   
   // E-Invoice
   invoice_no?: string;
-  invoice_status?: 'NOT_ISSUED' | 'PENDING' | 'ISSUED' | 'FAILED';
+  invoice_status?: 'NOT_ISSUED' | 'PENDING' | 'ISSUED' | 'FAILED' | 'DRAFT';
   invoice_error?: string;
   reservation_code?: string;
   

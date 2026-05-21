@@ -184,13 +184,13 @@ export async function createInvoice(
 
     const data = response.data;
     // Viettel result structure can vary; checking common success markers
-    const isSuccess = data.errorCode === "0" || !data.errorCode || data.result === "SUCCESS";
+    const isSuccess = data.errorCode === "0" || !data.errorCode || data.result === "SUCCESS" || (data.result && !data.errorCode);
 
     if (isSuccess && (data.invoiceNo || data.result?.invoiceNo)) {
       return {
         success: true,
         invoiceNo: data.invoiceNo || data.result.invoiceNo,
-        message: "Xuất hóa đơn thành công"
+        message: "Khởi tạo hóa đơn nháp thành công"
       };
     } else {
       return {
@@ -209,3 +209,59 @@ export async function createInvoice(
     };
   }
 }
+
+/**
+ * Test Viettel Connection using dedicated backend service validation
+ */
+export async function testViettelConnectionAPI(
+  config: ViettelConfig
+): Promise<{ success: boolean; message: string; details?: any; token?: string }> {
+  try {
+    const serviceUrl = config.viettelServiceUrl || 'https://api-vinvoice.viettel.vn';
+    
+    // Fetch raw config from Supabase to match backend expectation
+    let rawDbConfig: any = null;
+    try {
+      const { data } = await supabase
+        .from('viettel_config')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (data && data.length > 0) {
+        rawDbConfig = data[0];
+      }
+    } catch (err) {
+      console.warn('[Service] fallback dbConfig:', err);
+    }
+
+    const response = await axios.post('/api/viettel/test-connection', {
+      serviceUrl: serviceUrl,
+      taxCode: config.viettelSupplierTaxCode,
+      username: config.viettelUsername,
+      password: config.viettelPassword,
+      dbConfig: rawDbConfig
+    });
+
+    if (response.data && response.data.success) {
+      return {
+        success: true,
+        message: response.data.message || 'Kết nối mạng và xác thực tài khoản Viettel S-Invoice THÀNH CÔNG!',
+        token: response.data.templates ? JSON.stringify(response.data.templates).substring(0, 500) : undefined
+      };
+    } else {
+      return {
+        success: false,
+        message: response.data?.message || 'Không có tín hiệu phản hồi hợp lệ từ cổng dịch vụ Viettel.',
+        details: response.data
+      };
+    }
+  } catch (error: any) {
+    console.error('[Service] testViettelConnectionAPI error:', error);
+    const details = error.response?.data?.details || error.response?.data?.message || error.message;
+    return {
+      success: false,
+      message: "Không thể gọi api kiểm tra kết nối: " + (typeof details === 'object' ? JSON.stringify(details) : details)
+    };
+  }
+}
+

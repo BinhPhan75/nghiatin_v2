@@ -4,7 +4,7 @@ import { Product, SystemConfig, Profile, UserRole, UserStatus, Bank } from '../.
 import { useAuth } from '../../contexts/AuthContext';
 import { Save, UserPlus, Users, Tag, Building2, ShieldCheck, Download, Upload, Plus, Trash2, X, XCircle, CheckCircle, UserCheck, Clock, Save as SaveIcon } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
-import { getViettelAccessToken } from '../../services/viettelInvoiceService';
+import { getViettelAccessToken, testViettelConnectionAPI } from '../../services/viettelInvoiceService';
 
 const System: React.FC = () => {
   const { profile, isAdmin, loading: authLoading } = useAuth();
@@ -500,14 +500,16 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
       };
 
       console.log("[System] Testing connection using configuration with username:", configToTest.viettelUsername);
-      const token = await getViettelAccessToken(configToTest);
-      if (token) {
+      const testRes = await testViettelConnectionAPI(configToTest);
+      if (testRes.success) {
         setViettelTestResult({
           success: true,
-          message: "Thông tin cấu hình lưu trong bảng `viettel_config` là CHÍNH XÁC. Kết nối và lấy Access Token/Chữ ký thành công!",
-          token: token
+          message: testRes.message,
+          token: testRes.token
         });
-        setSuccessMsg("Kết nối Viettel thành công!");
+        setSuccessMsg("Kết nối Viettel S-Invoice thành công!");
+      } else {
+        throw new Error(testRes.message);
       }
     } catch (error: any) {
       console.error("[System] Viettel Connection Test Failed:", error);
@@ -523,7 +525,7 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
           const jsonObj = JSON.parse(jsonStr);
           details = jsonObj;
           if (jsonObj.status === 404 || jsonObj.code === '404') {
-            message = "Lỗi 404: Không tìm thấy trang. Có thể Auth URL sai. Hãy thử thêm '/services/einvoiceapplication/api' vào trước '/auth/login'.";
+            message = "Lỗi 404: Không tìm thấy trang. Có thể Auth URL sai. Hãy thử sử dụng đúng URL gốc của doanh nghiệp.";
           }
         } catch (e) {
           // fallback to original
@@ -1135,8 +1137,8 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
                   />
                 </div>
                 
-                <div className="flex items-center gap-4 py-4 md:col-span-2">
-                  <label className="flex items-center gap-3 cursor-pointer group">
+                <div className="flex flex-col gap-4 py-4 md:col-span-2 border-t border-neutral-100 mt-2 pt-4">
+                  <label className="flex items-center gap-3 cursor-pointer group mb-1">
                     <div className={`w-12 h-7 rounded-full transition-colors relative ${viettelEinvoiceConfig.viettelEnabled ? 'bg-gold-primary shadow-inner' : 'bg-neutral-300'}`}>
                       <input 
                         type="checkbox" 
@@ -1148,9 +1150,19 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
                     </div>
                     <div>
                       <span className="text-[11px] font-black uppercase tracking-widest text-ink block">Kích hoạt vInvoice</span>
-                      <span className="text-[9px] text-neutral-400 italic">Nếu bật, hệ thống sẽ tự động xuất hóa đơn sau mỗi giao dịch SELL.</span>
+                      <span className="text-[9px] text-neutral-400 italic">Nếu bật, hệ thống sẽ tự động lập hóa đơn nháp sau mỗi giao dịch SELL.</span>
                     </div>
                   </label>
+
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-sm">
+                    <p className="font-black uppercase tracking-wider text-[10px] text-blue-700 flex items-center gap-1.5 mb-1">
+                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                      🛡️ CHẾ ĐỘ HÓA ĐƠN NHÁP AN TOÀN (SAFE DRAFT MODE)
+                    </p>
+                    <p className="text-xs text-blue-900 leading-relaxed font-semibold">
+                      Để đảm bảo an toàn và tránh các sai sót phát hành hóa đơn ngoài ý muốn, hệ thống **chỉ dừng lại ở bước tạo hoá đơn nháp**. Kế toán viên của doanh nghiệp sẽ truy cập cổng quản trị S-Invoice của Viettel để xem lại dải số, thực hiện kiểm tra và ký số phát hành thủ công sau đó.
+                    </p>
+                  </div>
                 </div>
               </div>
 

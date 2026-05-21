@@ -333,7 +333,7 @@ async function startServer() {
 
     // --- BEGIN FALLBACK FOR PURE BASIC AUTH SYSTEMS (PROD S-INVOICE) ---
     // If standard token endpoints returned 404 (common on production S-Invoice which uses direct Basic Authentication instead of JSON token servers),
-    // we verify the credentials directly by querying the getCustomFields API using Basic Authentication.
+    // we verify the credentials directly by querying the getInvoiceTemplates API using Basic Authentication.
     const isMismatchedOrNotFound = !lastResponse || lastResponse.status === 404 || lastResponse.status === 502 || lastResponse.status === 504;
     const targetTaxCode = taxCode || username;
     
@@ -341,17 +341,19 @@ async function startServer() {
       try {
         const parsed = new URL(primaryUrl);
         const origin = parsed.origin;
-        const testEndpoint = `${origin}/InvoiceAPI/InvoiceWS/getCustomFields?taxCode=${encodeURIComponent(targetTaxCode.trim())}&templateCode=1`;
+        // Chuẩn vInvoice mới (Thông tư 78) - Tuyệt đối không sử dụng /InvoiceAPI
+        const testEndpoint = `${origin}/InvoiceWS/getInvoiceTemplates/${targetTaxCode.trim()}`;
         
         console.log(`[Viettel Token Fallback] Testing direct S-Invoice metadata API with Basic Auth: ${testEndpoint}`);
         
         const loginStr = `${username.trim()}:${password}`;
         const base64AuthToken = Buffer.from(loginStr).toString('base64');
         
-        const testResponse = await axios.get(testEndpoint, {
+        const testResponse = await axios.post(testEndpoint, {}, {
           headers: {
             'Authorization': `Basic ${base64AuthToken}`,
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
           },
           timeout: 10000, // Faster failure (10 seconds instead of 25)
           validateStatus: () => true
@@ -385,6 +387,41 @@ async function startServer() {
     }
 
     res.status(500).json({ error: 'Viettel Auth Error', message: 'Tất cả các cổng kết nối Viettel S-Invoice đều thất bại hoặc hết thời gian phản hồi (timed out).' });
+  });
+
+  // Dedicated Viettel Connection Test Route
+  app.post('/api/viettel/test-connection', async (req, res) => {
+    const { serviceUrl, taxCode, username, password, dbConfig } = req.body;
+    
+    // Normalize service url safely
+    const normalizedSvc = normalizeServiceUrl(serviceUrl);
+    let originUrl = 'https://api-vinvoice.viettel.vn';
+    try {
+      const parsedUrl = new URL(normalizedSvc);
+      originUrl = parsedUrl.origin;
+    } catch (e) {
+      // fallback
+    }
+
+    console.log(`[Viettel S-Invoice Backend] Testing connection for taxCode: ${taxCode}`);
+    console.log(`[Viettel S-Invoice Backend] Origin URL: ${originUrl}`);
+    
+    try {
+      const backendService = new ViettelSInvoiceBackendService(originUrl);
+      const testResult = await backendService.testConnection(
+        username,
+        password,
+        taxCode,
+        dbConfig
+      );
+      res.json(testResult);
+    } catch (error: any) {
+      console.error(`[Viettel S-Invoice Connection Exception]:`, error.message);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Lỗi kết nối hoặc xử lý thông số kiểm tra hệ thống S-Invoice.'
+      });
+    }
   });
 
   // Dedicated Viettel Create Invoice Route updated for v2.49 (Basic auth)

@@ -524,15 +524,15 @@ export class ViettelSInvoiceBackendService {
       ? Buffer.from(loginString).toString('base64')
       : btoa(unescape(encodeURIComponent(loginString)));
 
-    // Bước 3: Thiết lập danh sách các Endpoint Fallback đảm bảo không chèn cụm từ '/InvoiceAPI' gây lỗi 404
+    // Bước 3: Thiết lập danh sách các Endpoint Fallback lập hóa đơn nháp (importInvoice) đảm bảo không chèn cụm từ '/InvoiceAPI' gây lỗi 404
     // Chuẩn vInvoice mới (Thông tư 78) quy định tuyệt đối không được chèn `/InvoiceAPI` ở giữa.
     const endpoints = [
-      `${baseApiUrl}/InvoiceWS/createInvoice/${finalTaxCode}`,                    // Endpoint 1: Chuẩn vInvoice (Thông tư 78) chính thức
-      `${baseApiUrl}/services/InvoiceWS/createInvoice/${finalTaxCode}`             // Endpoint 2: Cổng phân hệ Services hỗ trợ mới nhất
+      `${baseApiUrl}/InvoiceWS/importInvoice/${finalTaxCode}`,                    // Endpoint 1: Lập hóa đơn nháp (Thông tư 78) chính thức
+      `${baseApiUrl}/services/InvoiceWS/importInvoice/${finalTaxCode}`             // Endpoint 2: Cổng phân hệ nhập hóa đơn nháp hỗ trợ mới nhất
     ];
 
-    console.log(`[SeniorBackend] Danh sách url S-Invoice Viettel chuẩn Thông tư 78 sẽ được thử nghiệm tuần tự (Tuyệt đối không sử dụng /InvoiceAPI):`);
-    endpoints.forEach((ep, idx) => console.log(` - Endpoint $[${idx + 1}]: ${ep}`));
+    console.log(`[SeniorBackend] Danh sách url S-Invoice Viettel (Chỉ tạo Hóa đơn nháp) chuẩn Thông tư 78 sẽ được thử nghiệm tuần tự (Tuyệt đối không sử dụng /InvoiceAPI):`);
+    endpoints.forEach((ep, idx) => console.log(` - Endpoint [${idx + 1}]: ${ep}`));
 
     let lastError: any = null;
     let finalResponse: AxiosResponse<any> | null = null;
@@ -555,7 +555,7 @@ export class ViettelSInvoiceBackendService {
               'Accept': 'application/json',
               'Authorization': `Basic ${base64AuthToken}` 
             },
-            // Cấu hình thời gian timeout tối thiểu 75000 (75 giây) chờ thiết bị HSM của Viettel ký số
+            // Cấu hình thời gian timeout tối thiểu 75000 (75 giây) chờ thiết bị HSM của Viettel phản hồi
             timeout: 75000,
             validateStatus: () => true // Cho phép tự đọc sâu status, tránh axios tự quăng Exception lỗi HTTP
           }
@@ -591,7 +591,7 @@ export class ViettelSInvoiceBackendService {
     // Bước 4: Phân loại dữ liệu phản hồi nhận được
     const responseData = finalResponse.data;
     console.log(`[SeniorBackend] Đọc dữ liệu thành công từ cổng được chấp thuận.`);
-    console.log(`[SeniorBackend] Chi tiết phản hồi S-Invoice:`, JSON.stringify(responseData));
+    console.log(`[SeniorBackend] Chi tiết phản hồi S-Invoice nháp:`, JSON.stringify(responseData));
 
     if (finalResponse.status >= 200 && finalResponse.status < 300) {
       const isSuccess = !responseData.errorCode || 
@@ -600,11 +600,15 @@ export class ViettelSInvoiceBackendService {
                         responseData.errorCode === 'SUCCESS';
 
       if (isSuccess && responseData.result) {
-        console.log(`[SeniorBackend] Xuất hóa đơn S-Invoice Viettel THÀNH CÔNG! Số hóa đơn: ${responseData.result.invoiceNo}`);
+        const invNo = responseData.result.invoiceNo || `NHÁP-${responseData.result.transactionID || responseData.result.reservationCode || 'OK'}`;
+        console.log(`[SeniorBackend] Tạo hóa đơn nháp S-Invoice Viettel THÀNH CÔNG! Định danh hóa đơn nháp: ${invNo}`);
         return {
           errorCode: null,
-          description: 'Phát hành hoá đơn điện tử thành công từ Viettel S-Invoice',
-          result: responseData.result
+          description: 'Khởi tạo hoá đơn nháp thành công từ Viettel S-Invoice. Quý khách vui lòng truy cập trang bán hàng Viettel để ký số thủ công.',
+          result: {
+            ...responseData.result,
+            invoiceNo: invNo
+          }
         };
       }
 
@@ -655,6 +659,106 @@ export class ViettelSInvoiceBackendService {
     }
 
     throw new Error(`[S-Invoice API Error] ${devFriendlyMessage}`);
+  }
+
+  /**
+   * Kiểm tra kết nối với API Viettel S-Invoice (Sử dụng API lấy mẫu hóa đơn getInvoiceTemplates)
+   * Để xác định thông tin đăng nhập và URL cấu hình có đúng hay không.
+   */
+  public async testConnection(
+    username: string,
+    password: string,
+    supplierTaxCode: string,
+    dbConfig?: ViettelConfigDB
+  ): Promise<{ success: boolean; message: string; templates?: any }> {
+    let finalUsername = username ? username.trim() : '';
+    let finalPassword = password || '';
+    let finalTaxCode = supplierTaxCode ? supplierTaxCode.trim() : '';
+    let baseApiUrl = this.baseUrl;
+
+    if (dbConfig) {
+      if (dbConfig.username) finalUsername = dbConfig.username.trim();
+      if (dbConfig.password) finalPassword = dbConfig.password;
+      if (dbConfig.tax_code) finalTaxCode = dbConfig.tax_code.trim();
+      if (dbConfig.api_url) baseApiUrl = this.normalizeUrl(dbConfig.api_url);
+    }
+
+    const loginString = `${finalUsername}:${finalPassword}`;
+    const base64AuthToken = typeof Buffer !== 'undefined'
+      ? Buffer.from(loginString).toString('base64')
+      : btoa(unescape(encodeURIComponent(loginString)));
+
+    const endpoints = [
+      `${baseApiUrl}/InvoiceWS/getInvoiceTemplates/${finalTaxCode}`,
+      `${baseApiUrl}/services/InvoiceWS/getInvoiceTemplates/${finalTaxCode}`
+    ];
+
+    console.log(`[SeniorBackend] Kiểm tra kết nối Viettel S-Invoice...`);
+    endpoints.forEach((ep) => console.log("URL kiểm tra thực tế:", ep));
+
+    let lastError: any = null;
+    for (const endpointUrl of endpoints) {
+      try {
+        console.log("Thử gọi URL kiểm tra kết nối:", endpointUrl);
+        const response = await axios.post(
+          endpointUrl,
+          {}, // Body rỗng
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': `Basic ${base64AuthToken}`
+            },
+            timeout: 20000 // Chờ tối đa 20 giây cho việc test kết nối
+          }
+        );
+
+        console.log(`[SeniorBackend] Kết quả kiểm tra kết nối: HTTP Status = ${response.status}`);
+
+        if (response.status === 404) {
+          lastError = new Error(`Lỗi HTTP 404 - Đường dẫn kiểm tra không tồn tại: ${endpointUrl}`);
+          continue;
+        }
+
+        if (response.status >= 200 && response.status < 300) {
+          // Thành công kết nối!
+          const data = response.data;
+          
+          if (data && (Array.isArray(data) || data.errorCode === 'SUCCESS' || !data.errorCode)) {
+            return {
+              success: true,
+              message: 'Kết nối mạng và xác thực tài khoản Viettel S-Invoice THÀNH CÔNG!',
+              templates: data
+            };
+          }
+
+          if (data && data.errorCode) {
+            let errorMsg = data.description || `Mã lỗi xác thực từ Viettel: ${data.errorCode}`;
+            if (data.errorCode === 'AUTH_FAILED' || data.errorCode === '401' || data.errorCode === 'FORBIDDEN') {
+              errorMsg = 'Xác thực thất bại! Sai tên đăng nhập (Mã số thuế) hoặc mật khẩu hóa đơn.';
+            }
+            return {
+              success: false,
+              message: `Kết nối thất bại: ${errorMsg}`
+            };
+          }
+
+          return {
+            success: true,
+            message: 'Kết nối thành công (nhận phản hồi từ Viettel).',
+            templates: data
+          };
+        }
+      } catch (err: any) {
+        console.error(`[SeniorBackend] Lỗi khi gọi thử cổng kết nối ${endpointUrl}:`, err.message);
+        lastError = err;
+      }
+    }
+
+    return {
+      success: false,
+      message: `Không thể kết nối đến máy chủ Viettel S-Invoice SInvoice. Chi tiết lỗi: ${lastError?.message || 'Không có phản hồi'}`
+    };
   }
 
   /**

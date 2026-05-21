@@ -446,7 +446,7 @@ const Transactions: React.FC = () => {
               // Update database with invoice no
               await supabase.from('transactions').update({
                 invoice_no: result.invoiceNo,
-                invoice_status: 'ISSUED'
+                invoice_status: 'DRAFT'
               }).eq('id', data[0].id);
             }
           } catch (invError) {
@@ -510,10 +510,10 @@ const Transactions: React.FC = () => {
         
         await supabase.from('transactions').update({
           invoice_no: result.invoiceNo,
-          invoice_status: 'ISSUED'
+          invoice_status: 'DRAFT'
         }).eq('id', lastInsertedId);
 
-        alert(`Đã phát hành hóa đơn thành công! Số: ${result.invoiceNo}`);
+        alert(`Đã khởi tạo hoá đơn nháp thành công! Định danh nháp: ${result.invoiceNo}. Kế toán viên có thể rà soát lại thông tin và ký phát hành thủ công trên trang portal Viettel S-Invoice.`);
       } else {
         throw new Error(result.message);
       }
