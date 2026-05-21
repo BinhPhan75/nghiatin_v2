@@ -57,6 +57,7 @@ const System: React.FC = () => {
   const [testingViettel, setTestingViettel] = useState(false);
   const [loading, setLoading] = useState(true);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [viettelTestResult, setViettelTestResult] = useState<any>(null);
 
   useEffect(() => {
     // Initial fetch for data that doesn't change often
@@ -368,6 +369,7 @@ const System: React.FC = () => {
     setSavingViettel(true);
     setSuccessMsg(null);
     setLastError(null);
+    setViettelTestResult(null);
 
     try {
       console.log("[System] Starting save Viettel config process...");
@@ -438,6 +440,7 @@ const System: React.FC = () => {
   const testViettelConnection = async () => {
     setTestingViettel(true);
     setLastError(null);
+    setViettelTestResult(null);
     try {
       console.log("[System] Testing Viettel connection directly from saved `viettel_config` table...");
       
@@ -472,7 +475,12 @@ const System: React.FC = () => {
       console.log("[System] Testing connection using configuration with username:", configToTest.viettelUsername);
       const token = await getViettelAccessToken(configToTest);
       if (token) {
-        alert("✅ Kết nối Viettel thành công!\n\nThông tin cấu hình lưu trong bảng `viettel_config` là CHÍNH XÁC. Đã lấy được Access Token thành công!");
+        setViettelTestResult({
+          success: true,
+          message: "Thông tin cấu hình lưu trong bảng `viettel_config` là CHÍNH XÁC. Kết nối và lấy Access Token/Chữ ký thành công!",
+          token: token
+        });
+        setSuccessMsg("Kết nối Viettel thành công!");
       }
     } catch (error: any) {
       console.error("[System] Viettel Connection Test Failed:", error);
@@ -502,7 +510,11 @@ const System: React.FC = () => {
         code: error.code || (details ? details.code : null)
       });
       
-      alert("❌ Lỗi kết nối Viettel:\n" + message);
+      setViettelTestResult({
+        success: false,
+        message: message,
+        details: details || error.details
+      });
     } finally {
       setTestingViettel(false);
     }
@@ -1097,6 +1109,36 @@ const System: React.FC = () => {
                   </label>
                 </div>
               </div>
+
+              {viettelTestResult && (
+                <div className={`p-4 border ${viettelTestResult.success ? 'bg-green-50/95 border-green-200 text-green-900 shadow-sm animate-fade-in' : 'bg-red-50/95 border-red-200 text-red-950 shadow-sm animate-fade-in'} rounded-sm text-xs space-y-2`}>
+                  <p className="font-black uppercase tracking-wider flex items-center gap-1.5 text-[10px]">
+                    {viettelTestResult.success ? (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping inline-block"></span>
+                        <span className="text-green-700">✅ KẾT QUẢ KIỂM TRA: THÀNH CÔNG!</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block animate-pulse"></span>
+                        <span className="text-red-700">❌ KẾT QUẢ KIỂM TRA: THẤT BẠI!</span>
+                      </>
+                    )}
+                  </p>
+                  <div className="font-bold text-[11px] leading-relaxed">{viettelTestResult.message}</div>
+                  {viettelTestResult.token && (
+                    <div className="bg-white/95 p-2 font-mono text-[9px] break-all border border-green-100 rounded text-neutral-600 mt-1 max-h-20 overflow-y-auto">
+                      <strong>Access Token / Auth base64:</strong> {viettelTestResult.token}
+                    </div>
+                  )}
+                  {viettelTestResult.details && (
+                    <div className="bg-white/95 p-2 font-mono text-[9px] overflow-x-auto border border-red-100 rounded text-neutral-600 mt-1 max-h-36">
+                      <strong>Chi tiết phản hồi lỗi:</strong>
+                      <pre className="whitespace-pre-wrap mt-1 text-[9px] text-red-800">{typeof viettelTestResult.details === 'object' ? JSON.stringify(viettelTestResult.details, null, 2) : viettelTestResult.details}</pre>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-col md:flex-row gap-4 pt-6 border-t border-neutral-200">
                 <button 
