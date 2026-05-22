@@ -126,92 +126,69 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
 
   const fetchConfigs = async () => {
     setLoading(true);
+
+    // Hiển thị cache ngay lập tức — không chờ Supabase
     try {
-      console.log("[System] Fetching configs...");
-      // 1. Fetch system general config (Bank info)
-      const { data: sysData, error: sysError } = await withTimeout(
-        supabase.from('system_config').select('*').limit(1),
-        45000,
-        "Không thể tải cấu hình chung từ cơ sở dữ liệu Supabase (Hết hạn truy vấn 45 giây. Nếu bạn dùng gói miễn phí, có thể cơ sở dữ liệu đang trong quá trình đánh thức/khởi động nguội - vui lòng đợi chút rồi thử lại)."
-      );
-      if (sysError) {
-        console.error("Lỗi khi tải cấu hình hệ thống:", sysError);
-        setLastError({
-          source: 'system_config',
-          message: sysError.message,
-          details: sysError.details,
-          code: sysError.code
-        });
+      const cachedV = localStorage.getItem('cached_viettel_config');
+      if (cachedV) {
+        setViettelEinvoiceConfig(JSON.parse(cachedV));
+        console.log("[System] Viettel config: dùng cache localStorage trước");
       }
-      
-      if (sysData && sysData.length > 0) {
-        console.log("[System] System config loaded:", sysData[0].id);
-        setConfig(sysData[0]);
-        try {
-          localStorage.setItem('cached_system_config', JSON.stringify(sysData[0]));
-        } catch (e) {
-          console.warn("Error caching system_config:", e);
+      const cachedSys = localStorage.getItem('cached_system_config');
+      if (cachedSys) setConfig(JSON.parse(cachedSys));
+    } catch (e) {}
+
+    try {
+      console.log("[System] Fetching configs từ Supabase (song song, timeout 8s)...");
+
+      // Chạy song song, timeout 8 giây mỗi query
+      const timeout8s = (promise: any) => Promise.race([
+        promise,
+        new Promise<any>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+      ]);
+
+      const [sysResult, vResult] = await Promise.allSettled([
+        timeout8s(supabase.from('system_config').select('*').limit(1)),
+        timeout8s(supabase.from('viettel_config').select('*').order('updated_at', { ascending: false }).limit(1))
+      ]);
+
+      // Xử lý system_config
+      if (sysResult.status === 'fulfilled') {
+        const { data: sysData, error: sysError } = sysResult.value;
+        if (!sysError && sysData && sysData.length > 0) {
+          setConfig(sysData[0]);
+          try { localStorage.setItem('cached_system_config', JSON.stringify(sysData[0])); } catch (e) {}
+          console.log("[System] system_config loaded OK");
+        } else if (sysError) {
+          console.warn("[System] system_config error:", sysError.message);
         }
       } else {
-        console.log("[System] No system config found, using default");
-        setConfig({
-          id: '00000000-0000-0000-0000-000000000000',
-          bank_name: '',
-          account_no: '',
-          account_holder: '',
-          bank_id: ''
-        } as any);
+        console.warn("[System] system_config timeout/lỗi:", sysResult.reason?.message);
       }
 
-      // 2. Fetch Viettel dedicated config - Order by latest updated
-      const { data: vDataList, error: vError } = await withTimeout(
-        supabase
-          .from('viettel_config')
-          .select('*')
-          .order('updated_at', { ascending: false })
-          .limit(1),
-        45000,
-        "Không thể tải cấu hình Viettel từ cơ sở dữ liệu Supabase (Hết hạn kết nối 45 giây. Nếu bạn dùng gói Supabase miễn phí, có thể database đang khởi động lại từ chế độ ngủ - vui lòng đợi ít giây)."
-      );
-        
-      if (vError) {
-        console.error("Lỗi khi tải cấu hình Viettel:", vError);
-        // Don't overwrite sysError if it already exists, but log it
-        if (!sysError) {
-          setLastError({
-            source: 'viettel_config',
-            message: vError.message,
-            details: vError.details,
-            code: vError.code
-          });
-        }
-      }
-      
-      if (!vError && vDataList && vDataList.length > 0) {
-        const vData = vDataList[0];
-        console.log("[System] Viettel config loaded:", vData.id, "at", vData.updated_at);
-        
-        // Extract from json field if exists for more flexibility, else from columns
-        const jsonCfg = vData.viettel_einvoice_config || {};
-        
-        const freshViettelEinvoice = {
-          viettelAuthUrl: vData.auth_url || jsonCfg.viettelAuthUrl || 'https://api-vinvoice.viettel.vn/auth/login',
-          viettelServiceUrl: vData.api_url || jsonCfg.viettelServiceUrl || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api',
-          viettelUsername: vData.username || vData.app_id || '',
-          viettelPassword: vData.password || '',
-          viettelSupplierTaxCode: vData.tax_code || '',
-          viettelTemplateCode: vData.template_code || '',
-          viettelInvoiceSeries: vData.invoice_series || '',
-          viettelEnabled: vData.is_sandbox === false
-        };
-        setViettelEinvoiceConfig(freshViettelEinvoice);
-        try {
-          localStorage.setItem('cached_viettel_config', JSON.stringify(freshViettelEinvoice));
-        } catch (e) {
-          console.warn("Error caching viettel_config:", e);
+      // Xử lý viettel_config
+      if (vResult.status === 'fulfilled') {
+        const { data: vDataList, error: vError } = vResult.value;
+        if (!vError && vDataList && vDataList.length > 0) {
+          const vData = vDataList[0];
+          const freshViettelEinvoice = {
+            viettelAuthUrl: vData.api_url || 'https://api-vinvoice.viettel.vn',
+            viettelServiceUrl: vData.api_url || 'https://api-vinvoice.viettel.vn',
+            viettelUsername: vData.username || vData.app_id || '',
+            viettelPassword: vData.password || '',
+            viettelSupplierTaxCode: vData.tax_code || '',
+            viettelTemplateCode: vData.template_code || '',
+            viettelInvoiceSeries: vData.invoice_series || '',
+            viettelEnabled: vData.is_sandbox === false
+          };
+          setViettelEinvoiceConfig(freshViettelEinvoice);
+          try { localStorage.setItem('cached_viettel_config', JSON.stringify(freshViettelEinvoice)); } catch (e) {}
+          console.log("[System] viettel_config loaded OK:", vData.username, vData.tax_code);
+        } else if (vError) {
+          console.warn("[System] viettel_config error:", vError.message);
         }
       } else {
-        console.log("[System] No Viettel config found in viettel_config table");
+        console.warn("[System] viettel_config timeout/lỗi:", vResult.reason?.message);
       }
     } catch (error: any) {
       console.error("Error fetching configs:", error);
