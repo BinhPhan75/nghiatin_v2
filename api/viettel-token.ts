@@ -3,7 +3,9 @@ import axios from 'axios';
 
 /**
  * Vercel Serverless Function: POST /api/viettel/token
- * Xác thực tài khoản Viettel vInvoice, trả về access_token hoặc Basic Auth token.
+ * Xác thực tài khoản Viettel vInvoice.
+ * - Thử JSON login trước (vInvoice v2.49+)
+ * - Fallback: Basic Auth qua GET getInvoiceTemplates
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -16,7 +18,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Thiếu username hoặc password' });
   }
 
-  // Chuẩn hóa auth URL
   const normalizeAuthUrl = (url: string): string => {
     let u = (url || '').trim().replace(/\/+$/, '');
     if (!u) return 'https://api-vinvoice.viettel.vn/auth/login';
@@ -39,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try { return new URL(primaryUrl).origin; } catch { return 'https://api-vinvoice.viettel.vn'; }
   })();
 
-  const urlsToTry = [
+  const jsonLoginUrls = [
     primaryUrl,
     `${originBase}/auth/login`,
     `${originBase}/services/einvoiceapplication/api/auth/login`,
@@ -47,10 +48,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let lastResponse: any = null;
 
-  // Thử đăng nhập JSON (vInvoice v2.49+)
-  for (const url of urlsToTry) {
+  // 1. Thử JSON login (vInvoice v2.49+)
+  for (const url of jsonLoginUrls) {
     try {
-      console.log(`[Token] Thử JSON login: ${url}`);
+      console.log(`[Token] JSON login: ${url}`);
       const response = await axios.post(url, { username, password }, {
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         timeout: 8000,
@@ -60,72 +61,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`[Token] ${url} → HTTP ${response.status}`);
       lastResponse = response;
 
-      if (response.status >= 200 && response.status < 300) {
-        console.log(`[Token] Đăng nhập JSON thành công tại: ${url}`);
+      if (response.status >= 200 && response.status < 300 && response.data?.access_token) {
+        console.log(`[Token] JSON login thành công: ${url}`);
         return res.json(response.data);
       }
 
       if (response.status === 401 || response.status === 403) break;
     } catch (err: any) {
-      console.warn(`[Token] Lỗi kết nối ${url}:`, err.message);
+      console.warn(`[Token] Lỗi ${url}:`, err.message);
     }
   }
 
-  // Fallback: Basic Authentication qua getInvoiceTemplates
+  // 2. Fallback: Basic Auth — dùng GET getInvoiceTemplates để xác minh credentials
   const targetTaxCode = (taxCode || username || '').trim();
-  const isMissingOrNotFound =
-    !lastResponse || [404, 502, 503, 504].includes(lastResponse?.status);
+  const isMissingOrNotFound = !lastResponse || [404, 405, 502, 503, 504].includes(lastResponse?.status);
 
-  if (isMissingOrNotFound && targetTaxCode) {
-    try {
-      const base64Auth = Buffer.from(`${username.trim()}:${password}`).toString('base64');
-      const testEndpoints = [
-        `${originBase}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${targetTaxCode}`,
-        `${originBase}/InvoiceWS/getInvoiceTemplates/${targetTaxCode}`,
-      ];
+  if (targetTaxCode) {
+    const base64Auth = Buffer.from(`${username.trim()}:${password}`).toString('base64');
 
-      for (const ep of testEndpoints) {
-        try {
-          console.log(`[Token Fallback] Basic Auth test: ${ep}`);
-          const testRes = await axios.post(ep, {}, {
-            headers: {
-              'Authorization': `Basic ${base64Auth}`,
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            timeout: 10000,
-            validateStatus: () => true,
+    const basicAuthEndpoints: { url: string; method: 'GET' | 'POST' }[] = [
+      { url: `${originBase}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${targetTaxCode}`, method: 'GET' },
+      { url: `${originBase}/InvoiceWS/getInvoiceTemplates/${targetTaxCode}`, method: 'GET' },
+      { url: `${originBase}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${targetTaxCode}`, method: 'POST' },
+      { url: `${originBase}/InvoiceWS/getInvoiceTemplates/${targetTaxCode}`, method: 'POST' },
+    ];
+
+    for (const { url: ep, method } of basicAuthEndpoints) {
+      try {
+        console.log(`[Token Fallback] ${method} Basic Auth: ${ep}`);
+        const testRes = await axios({
+          method,
+          url: ep,
+          ...(method === 'POST' ? { data: {} } : {}),
+          headers: {
+            'Authorization': `Basic ${base64Auth}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          timeout: 10000,
+          validateStatus: () => true,
+        });
+
+        console.log(`[Token Fallback] ${ep} → HTTP ${testRes.status}`);
+
+        if (testRes.status === 401 || testRes.status === 403) {
+          return res.status(401).json({
+            error: 'Xác thực thất bại',
+            details: 'Sai tên đăng nhập hoặc mật khẩu Viettel vInvoice.',
           });
-
-          console.log(`[Token Fallback] ${ep} → HTTP ${testRes.status}`);
-
-          // 401/403 = sai credentials, dừng luôn
-          if (testRes.status === 401 || testRes.status === 403) {
-            return res.status(401).json({
-              error: 'Xác thực thất bại',
-              details: 'Sai tên đăng nhập hoặc mật khẩu Viettel vInvoice.',
-            });
-          }
-
-          // Bất kỳ status nào khác 401/403/502/504 = credentials OK
-          if (![502, 504].includes(testRes.status)) {
-            console.log(`[Token Fallback] Basic Auth thành công!`);
-            return res.json({
-              access_token: base64Auth,
-              token_type: 'Basic',
-              description: 'Xác thực Basic Authentication thành công',
-            });
-          }
-        } catch (e: any) {
-          console.warn(`[Token Fallback] Lỗi ${ep}:`, e.message);
         }
+
+        // 405/404 = sai method/path, thử tiếp
+        if (testRes.status === 405 || testRes.status === 404) continue;
+
+        // Bất kỳ response khác 4xx/5xx = credentials OK
+        if (testRes.status < 500) {
+          console.log(`[Token Fallback] Basic Auth xác minh thành công!`);
+          return res.json({
+            access_token: base64Auth,
+            token_type: 'Basic',
+            description: 'Xác thực Basic Authentication thành công',
+          });
+        }
+      } catch (e: any) {
+        console.warn(`[Token Fallback] Lỗi ${ep}:`, e.message);
       }
-    } catch (e: any) {
-      console.error('[Token Fallback] Lỗi tổng:', e.message);
     }
   }
 
-  // Trả về lỗi chi tiết
   if (lastResponse) {
     return res.status(lastResponse.status || 500).json({
       error: 'Viettel Auth Error',

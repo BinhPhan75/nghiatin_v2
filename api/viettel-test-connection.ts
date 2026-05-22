@@ -16,7 +16,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const finalPassword = dbConfig?.password || password || '';
   const finalTaxCode = (dbConfig?.tax_code || taxCode || '').trim();
 
-  // Xác định base origin từ serviceUrl
   const getOrigin = (url: string): string => {
     try {
       const u = (url || '').trim().replace(/\/+$/, '');
@@ -38,19 +37,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const base64Auth = Buffer.from(`${finalUsername}:${finalPassword}`).toString('base64');
 
-  const endpointsToTry = [
-    `${origin}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${finalTaxCode}`,
-    `${origin}/InvoiceWS/getInvoiceTemplates/${finalTaxCode}`,
+  // getInvoiceTemplates theo tài liệu Viettel vInvoice dùng GET
+  // Thử nhiều path và cả GET + POST để tương thích
+  const endpointsToTry: { url: string; method: 'GET' | 'POST' }[] = [
+    { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${finalTaxCode}`, method: 'GET' },
+    { url: `${origin}/InvoiceWS/getInvoiceTemplates/${finalTaxCode}`, method: 'GET' },
+    { url: `${origin}/services/einvoiceapplication/api/InvoiceWS/getInvoiceTemplates/${finalTaxCode}`, method: 'POST' },
+    { url: `${origin}/InvoiceWS/getInvoiceTemplates/${finalTaxCode}`, method: 'POST' },
   ];
 
   console.log(`[TestConnection] taxCode=${finalTaxCode}, origin=${origin}`);
 
   let lastError: any = null;
+  let lastStatus: number = 0;
 
-  for (const ep of endpointsToTry) {
+  for (const { url: ep, method } of endpointsToTry) {
     try {
-      console.log(`[TestConnection] Thử endpoint: ${ep}`);
-      const response = await axios.post(ep, {}, {
+      console.log(`[TestConnection] ${method} ${ep}`);
+      const response = await axios({
+        method,
+        url: ep,
+        ...(method === 'POST' ? { data: {} } : {}),
         headers: {
           'Authorization': `Basic ${base64Auth}`,
           'Content-Type': 'application/json',
@@ -61,6 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       console.log(`[TestConnection] ${ep} → HTTP ${response.status}`);
+      lastStatus = response.status;
 
       if (response.status === 401 || response.status === 403) {
         return res.json({
@@ -69,22 +77,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
+      // 405 = method sai, thử method kế tiếp
+      if (response.status === 405) {
+        lastError = new Error(`405 Method Not Allowed tại ${ep}`);
+        continue;
+      }
+
       if (response.status === 404) {
-        lastError = new Error(`404 tại ${ep}`);
+        lastError = new Error(`404 Not Found tại ${ep}`);
         continue;
       }
 
       if (response.status >= 200 && response.status < 300) {
         const data = response.data;
-        // errorCode rỗng hoặc không có = thành công
-        if (!data?.errorCode || data.errorCode === '' || data.errorCode === '0' || data.errorCode === 'SUCCESS') {
+        const isSuccess = !data?.errorCode || data.errorCode === '' || data.errorCode === '0' || data.errorCode === 'SUCCESS';
+        if (isSuccess) {
           return res.json({
             success: true,
-            message: `Kết nối và xác thực Viettel vInvoice THÀNH CÔNG! (${ep})`,
+            message: `Kết nối và xác thực Viettel vInvoice THÀNH CÔNG!`,
             templates: data,
           });
         }
-
         const errMsg = data.description || `Mã lỗi: ${data.errorCode}`;
         return res.json({
           success: false,
@@ -92,7 +105,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      // 5xx hoặc khác
       lastError = new Error(`HTTP ${response.status} từ ${ep}`);
     } catch (err: any) {
       console.warn(`[TestConnection] Lỗi ${ep}:`, err.message);
