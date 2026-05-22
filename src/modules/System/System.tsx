@@ -500,24 +500,48 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
     setLastError(null);
     setViettelTestResult(null);
     try {
-      console.log("[System] Testing Viettel connection directly using current form fields config...");
-      
-      if (!viettelEinvoiceConfig.viettelUsername) {
-        throw new Error("Vui lòng điền Tài khoản đăng nhập Viettel trước khi kiểm tra!");
+      // Ưu tiên load trực tiếp từ Supabase để luôn dùng config mới nhất
+      let liveConfig = viettelEinvoiceConfig;
+      try {
+        const { data: fresh } = await supabase
+          .from('viettel_config')
+          .select('*')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .single();
+        if (fresh) {
+          liveConfig = {
+            viettelAuthUrl: fresh.api_url || 'https://api-vinvoice.viettel.vn',
+            viettelServiceUrl: fresh.api_url || 'https://api-vinvoice.viettel.vn',
+            viettelUsername: fresh.username || '',
+            viettelPassword: fresh.password || '',
+            viettelSupplierTaxCode: fresh.tax_code || '',
+            viettelTemplateCode: fresh.template_code || '',
+            viettelInvoiceSeries: fresh.invoice_series || '',
+            viettelEnabled: fresh.is_sandbox === false,
+          };
+          setViettelEinvoiceConfig(liveConfig);
+        }
+      } catch (dbErr) {
+        console.warn("[System] Không thể reload từ Supabase, dùng config hiện tại:", dbErr);
       }
-      
+
+      if (!liveConfig.viettelUsername) {
+        throw new Error("Chưa có cấu hình Viettel trong hệ thống. Vui lòng điền và lưu thông tin trước!");
+      }
+
       const configToTest = {
-        viettelAuthUrl: viettelEinvoiceConfig.viettelAuthUrl || 'https://api-vinvoice.viettel.vn/auth/login',
-        viettelServiceUrl: viettelEinvoiceConfig.viettelServiceUrl || 'https://api-vinvoice.viettel.vn/services/einvoiceapplication/api',
-        viettelUsername: viettelEinvoiceConfig.viettelUsername,
-        viettelPassword: viettelEinvoiceConfig.viettelPassword || '',
-        viettelSupplierTaxCode: viettelEinvoiceConfig.viettelSupplierTaxCode || '',
-        viettelTemplateCode: viettelEinvoiceConfig.viettelTemplateCode || '',
-        viettelInvoiceSeries: viettelEinvoiceConfig.viettelInvoiceSeries || '',
-        viettelEnabled: viettelEinvoiceConfig.viettelEnabled
+        viettelAuthUrl: liveConfig.viettelAuthUrl || 'https://api-vinvoice.viettel.vn',
+        viettelServiceUrl: liveConfig.viettelServiceUrl || 'https://api-vinvoice.viettel.vn',
+        viettelUsername: liveConfig.viettelUsername,
+        viettelPassword: liveConfig.viettelPassword || '',
+        viettelSupplierTaxCode: liveConfig.viettelSupplierTaxCode || '',
+        viettelTemplateCode: liveConfig.viettelTemplateCode || '',
+        viettelInvoiceSeries: liveConfig.viettelInvoiceSeries || '',
+        viettelEnabled: liveConfig.viettelEnabled,
       };
 
-      console.log("[System] Testing connection using configuration with username:", configToTest.viettelUsername);
+      console.log("[System] Kiểm tra kết nối với username:", configToTest.viettelUsername, "MST:", configToTest.viettelSupplierTaxCode);
       const testRes = await testViettelConnectionAPI(configToTest);
       if (testRes.success) {
         setViettelTestResult({
@@ -1074,20 +1098,16 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
               <h3 className="text-xl uppercase font-black tracking-tight">Hóa đơn điện tử Viettel (vInvoice)</h3>
             </div>
 
-            {window.location.hostname.includes('vercel.app') && (
-              <div className="bg-amber-50 border border-amber-200 p-4 rounded-sm text-xs space-y-1.5 text-amber-900 animate-fade-in mb-2 shadow-sm">
-                <p className="font-black uppercase tracking-wider flex items-center gap-1.5 text-[10px] text-amber-700">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                  ⚠️ Cảnh báo môi trường chạy (Vercel)
-                </p>
-                <div className="font-medium text-amber-800 leading-relaxed">
-                  Bạn đang truy cập ứng dụng từ tên miền <strong>{window.location.hostname}</strong>. 
-                  Môi trường Vercel tĩnh <strong>không có máy chủ Express Backend hoạt động</strong> để proxy kết nối Viettel. 
-                  Các tính năng kiểm tra kết nối và xuất hóa đơn sẽ báo lỗi hoặc không phản hồi (404/CORS) khi thử ở đây.
-                </div>
-                <div className="text-[11px] text-amber-700 font-bold">
-                  ➡️ Vui lòng nhấn vào nút "Hỏi Gemini" trong AI Studio hoặc sử dụng đúng đường dẫn Cloud Run của bạn để chạy đầy đủ chức năng!
-                </div>
+            {loading && (
+              <div className="bg-blue-50 border border-blue-200 p-3 rounded-sm text-xs text-blue-700 flex items-center gap-2 animate-pulse">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping inline-block"></span>
+                Đang tải cấu hình từ Supabase...
+              </div>
+            )}
+            {!loading && viettelEinvoiceConfig.viettelUsername && (
+              <div className="bg-green-50 border border-green-200 p-3 rounded-sm text-xs text-green-800 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 inline-block"></span>
+                <span>Đã tải cấu hình từ Supabase — tài khoản: <strong>{viettelEinvoiceConfig.viettelUsername}</strong> · MST: <strong>{viettelEinvoiceConfig.viettelSupplierTaxCode}</strong></span>
               </div>
             )}
 
