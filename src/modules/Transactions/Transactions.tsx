@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { cachedQuery, invalidateCachePrefix } from '../../lib/queryCache';
 import { Product, Transaction, SystemConfig, Bank } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { Camera, QrCode, CreditCard, Send, CheckCircle2, Search, ArrowLeftRight, X, XCircle, UserPlus } from 'lucide-react';
@@ -176,15 +177,22 @@ const Transactions: React.FC = () => {
   }, []);
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('*');
+    const data = await cachedQuery('products', async () => {
+      const { data } = await supabase.from('products').select('*');
+      return data || [];
+    });
     if (data) setProducts(data);
   };
 
   const fetchConfig = async () => {
     try {
-      const { data } = await supabase.from('system_config').select('*').limit(1);
-      if (data && data.length > 0) {
-        setConfig(data[0]);
+      const data = await cachedQuery('system_config', async () => {
+        const { data } = await supabase.from('system_config').select('*').limit(1);
+        return data || [];
+      });
+      const arr = data as any[];
+      if (arr && arr.length > 0) {
+        setConfig(arr[0]);
         try {
           localStorage.setItem('cached_system_config', JSON.stringify(data[0]));
         } catch (e) {
@@ -197,7 +205,10 @@ const Transactions: React.FC = () => {
   };
 
   const fetchBanks = async () => {
-    const { data } = await supabase.from('banks').select('*').order('short_name');
+    const data = await cachedQuery('banks', async () => {
+      const { data } = await supabase.from('banks').select('*').order('short_name');
+      return data || [];
+    });
     if (data) setBanks(data);
   };
 
@@ -425,6 +436,7 @@ const Transactions: React.FC = () => {
 
     setLastError(null);
     try {
+      invalidateCachePrefix('transactions');
       const { data, error } = await supabase.from('transactions').insert(transactions).select('id');
       if (error) throw error;
       

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { cachedQuery, invalidateCachePrefix } from '../../lib/queryCache';
 import { Transaction, Product, Profile } from '../../types';
 import { Search, Filter, Download, ArrowUpCircle, ArrowDownCircle, X, ExternalLink, Printer, Trash2 } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
@@ -44,7 +45,10 @@ const Reports: React.FC = () => {
   }, []);
 
   const fetchBanks = async () => {
-    const { data } = await supabase.from('banks').select('*');
+    const data = await cachedQuery('banks', async () => {
+      const { data } = await supabase.from('banks').select('*');
+      return data || [];
+    });
     if (data) setBanks(data);
   };
 
@@ -82,7 +86,10 @@ const Reports: React.FC = () => {
   };
 
   const fetchProducts = async () => {
-    const { data } = await supabase.from('products').select('*');
+    const data = await cachedQuery('products', async () => {
+      const { data } = await supabase.from('products').select('*');
+      return data || [];
+    });
     if (data) setProducts(data);
   };
 
@@ -96,36 +103,23 @@ const Reports: React.FC = () => {
         .lte('created_at', `${endDate}T23:59:59`)
         .order('created_at', { ascending: false });
 
-      if (productId) {
-        query = query.eq('product_id', productId);
-      }
+      if (productId) query = query.eq('product_id', productId);
+      if (customerCCCD) query = query.ilike('customer_cccd', `%${customerCCCD}%`);
 
-      if (customerCCCD) {
-        query = query.ilike('customer_cccd', `%${customerCCCD}%`);
-      }
+      // Chạy song song: transactions + profiles (không chờ nhau)
+      const [txResult, profilesData] = await Promise.all([
+        query,
+        cachedQuery<Profile[]>('profiles', async () => {
+          const { data } = await supabase.from('profiles').select('id,full_name,email,role');
+          return data || [];
+        }),
+      ]);
 
-      const { data, error } = await query;
+      if (txResult.error) throw txResult.error;
+      const rawData = txResult.data || [];
 
-      if (error) throw error;
-      
-      const rawData = data || [];
-
-      // Fetch profiles for all unique created_by IDs to manually "join"
-      const createdByShortList = [...new Set(rawData.map(t => t.created_by))].filter(Boolean);
       let profilesMap: Record<string, Profile> = {};
-
-      if (createdByShortList.length > 0) {
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('*')
-          .in('id', createdByShortList);
-        
-        if (profilesData) {
-          profilesData.forEach(p => {
-            profilesMap[p.id] = p;
-          });
-        }
-      }
+      (profilesData || []).forEach((p: Profile) => { profilesMap[p.id] = p; });
       
       // Grouping logic: Transactions with the same customer within 1 minute of each other
       const grouped: GroupedTransaction[] = [];

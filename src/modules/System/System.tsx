@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Save, UserPlus, Users, Tag, Building2, ShieldCheck, Download, Upload, Plus, Trash2, X, XCircle, CheckCircle, UserCheck, Clock, Save as SaveIcon } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
 import { getViettelAccessToken, testViettelConnectionAPI } from '../../services/viettelInvoiceService';
+import { cachedQuery, invalidateCache } from '../../lib/queryCache';
 
 const System: React.FC = () => {
   const { profile, isAdmin, loading: authLoading } = useAuth();
@@ -113,11 +114,14 @@ const withTimeout = (promise: any, timeoutMs: number, errorMsg: string): Promise
 };
 
   const fetchProducts = async () => {
-    const { data: snapshot } = await supabase.from('products').select('*').order('name');
-    if (snapshot) {
-      setProducts(snapshot);
+    const snapshot = await cachedQuery('products', async () => {
+      const { data } = await supabase.from('products').select('*').order('name');
+      return data || [];
+    });
+    if (snapshot && (snapshot as any[]).length >= 0) { const snapArr = snapshot as any[];
+      setProducts(snapArr);
       const initialEditing: Record<string, { buy_price: number; sell_price: number }> = {};
-      snapshot.forEach(p => {
+      snapArr.forEach(p => {
         initialEditing[p.id] = { buy_price: p.buy_price, sell_price: p.sell_price };
       });
       setEditingPrices(initialEditing);

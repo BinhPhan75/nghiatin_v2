@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { TrendingUp, TrendingDown, Scale, ShoppingBag, Clock } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
+import { cachedQuery } from '../../lib/queryCache';
 import { motion } from 'motion/react';
 
 const Dashboard: React.FC = () => {
@@ -53,10 +54,31 @@ const Dashboard: React.FC = () => {
 
   const fetchDashboardData = async () => {
     const today = new Date().toISOString().split('T')[0];
-    const { data: transactions } = await supabase
-      .from('transactions')
-      .select('*')
-      .gte('created_at', `${today}T00:00:00`);
+
+    // Chạy song song: transactions hôm nay + products
+    const [transactions, pData] = await Promise.all([
+      cachedQuery<any[]>(
+        `transactions:${today}`,
+        async () => {
+          const { data } = await supabase
+            .from('transactions')
+            .select('id,type,total_amount,product_name,created_at,customer_cccd,tien_mat,chuyen_khoan')
+            .gte('created_at', `${today}T00:00:00`);
+          return data || [];
+        }
+      ),
+      cachedQuery<any[]>(
+        'products',
+        async () => {
+          const { data } = await supabase.from('products').select('*');
+          return data || [];
+        },
+        setProducts
+      ),
+    ]);
+
+    if (pData) setProducts(pData);
+    if (!transactions) return;
 
     if (transactions) {
       const buyTransactions = transactions.filter(t => t.type === 'BUY');
@@ -115,8 +137,7 @@ const Dashboard: React.FC = () => {
       setHourlyData(Object.values(hourlyMap));
     }
 
-    const { data: pData } = await supabase.from('products').select('*');
-    if (pData) setProducts(pData);
+    // products đã fetch song song ở trên
   };
 
   const COLORS = ['#D4AF37', '#141414', '#996515', '#006738', '#4b5563'];
