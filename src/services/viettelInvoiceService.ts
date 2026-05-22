@@ -129,7 +129,7 @@ export async function getViettelAccessToken(config: ViettelConfig): Promise<stri
     });
 
     if (response.data && typeof response.data === 'string' && (response.data.includes('<!DOCTYPE html>') || response.data.includes('<html'))) {
-      throw new Error('Môi trường tĩnh (Vercel) không hỗ trợ chạy Backend Express Proxy Server. Bạn phải mở và chạy ứng dụng thông qua đường dẫn AI Studio Cloud Run (hoặc máy chủ Node.js có tích hợp server.ts) để chạy các API hóa đơn điện tử.');
+      throw new Error('API backend chưa được cấu hình đúng. Vui lòng kiểm tra lại vercel.json và Serverless Functions.');
     }
 
     if (response.data && response.data.access_token) {
@@ -137,7 +137,7 @@ export async function getViettelAccessToken(config: ViettelConfig): Promise<stri
     }
   } catch (error: any) {
     if (error.response?.status === 404) {
-      throw new Error('Đường dẫn API backend /api/viettel/token không tồn tại (Lỗi 404). Các tính năng kết nối Viettel yêu cầu máy chủ Express backend hoạt động. Nếu đang chạy trên Vercel tĩnh, vui lòng chuyển sang đường dẫn AI Studio Cloud Run.');
+      throw new Error('Endpoint /api/viettel/token không tìm thấy (404). Kiểm tra lại vercel.json và file api/viettel-token.ts đã được deploy chưa.');
     }
     const errorData = error.response?.data;
     const errorMsg = errorData?.details || errorData?.message || errorData?.error || error.message;

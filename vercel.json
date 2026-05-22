@@ -1,0 +1,22 @@
+{
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/api/viettel/token",
+      "destination": "/api/viettel-token"
+    },
+    {
+      "source": "/api/viettel/test-connection",
+      "destination": "/api/viettel-test-connection"
+    },
+    {
+      "source": "/api/viettel/create-invoice",
+      "destination": "/api/viettel-create-invoice"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
